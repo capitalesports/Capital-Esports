@@ -460,3 +460,13 @@ At the owner's request, things rise slightly when the mouse is on them and settl
 - **Cards** (`card-ds-interactive`: match, game, tournament and event cards) rise 4px with a soft gold shadow, alongside the existing gold border.
 - **Buttons** (default, gold-outline, outline, secondary, destructive) rise 2px, and pressing pushes them back down. Ghost and link buttons (icons, menus) don't move.
 - Only on devices with a mouse (`hover: hover`), so a tap on a phone never leaves a card raised. It is turned off for people who chose reduced motion.
+
+### M35 Hosting on Vercel
+Production runs on Vercel (region `sin1`, next to the Neon Postgres database) at capitalesports.in.
+- Uploads go to Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set (`server/providers/storage.ts`).
+- The Hobby plan allows only daily crons, so `vercel.json` schedules them once a day. Registration opening and closing still happen on time because pages and registration catch match statuses up when they run (`server/jobs/status-catch-up.ts`).
+
+### M36 Firebase ID tokens verified with jose
+On Vercel, `firebase-admin/auth` fails to load (its `jwks-rsa` dependency `require()`s the ESM-only `jose`), which broke Google and phone login in production with "Something went wrong."
+- `server/auth/firebase-id-token.ts` now verifies the token the way Firebase documents: RS256 against Google's securetoken public keys, with issuer `https://securetoken.google.com/<project>` and audience `<project>`. Both the OTP and the Google verifiers use it.
+- The revocation check (`verifyIdToken(token, true)`) is dropped. Sign-in still requires a token from the last 10 minutes, and bans are enforced by our own `Ban` table, so nothing a revocation check caught is lost.

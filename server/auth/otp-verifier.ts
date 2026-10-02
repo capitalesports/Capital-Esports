@@ -1,5 +1,6 @@
 import "server-only";
 import { AppError } from "@/server/errors";
+import { verifyFirebaseIdToken } from "@/server/auth/firebase-id-token";
 import { firebaseAdminConfig, otpStubAllowed } from "@/server/env";
 import { normalizePhone } from "@/lib/validators";
 
@@ -21,15 +22,10 @@ class FirebaseOtpVerifier implements OtpVerifier {
   readonly kind = "firebase" as const;
 
   async verify(idToken: string): Promise<{ phone: string }> {
-    const cfg = firebaseAdminConfig()!;
-    const { cert, getApps, initializeApp } = await import("firebase-admin/app");
-    const { getAuth } = await import("firebase-admin/auth");
-    const app =
-      getApps().find((a) => a.name === "esports") ??
-      initializeApp({ credential: cert(cfg), projectId: cfg.projectId }, "esports");
+    const { projectId } = firebaseAdminConfig()!;
     let decoded;
     try {
-      decoded = await getAuth(app).verifyIdToken(idToken, true);
+      decoded = await verifyFirebaseIdToken(idToken, projectId);
     } catch {
       throw new AppError("UNAUTHENTICATED", INVALID);
     }
