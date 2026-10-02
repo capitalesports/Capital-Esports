@@ -87,7 +87,7 @@ describe("Continue with Google (DECISIONS M29, M31)", () => {
     const payout = await testDb().payout.create({ data: { userId: out.id, place: 1, amountPaise: 10_000 } });
     await expect(approvePayout({ id: adminId, role: "ADMIN" }, { payoutId: payout.id })).rejects.toMatchObject({
       code: "CONFLICT",
-      message: expect.stringContaining("mobile number"),
+      message: expect.stringContaining("isn't registered with Cashfree"),
     });
     // Paying by hand still works.
     expect(await revealPayoutUpi({ id: adminId, role: "ADMIN" }, { payoutId: payout.id })).toMatchObject({

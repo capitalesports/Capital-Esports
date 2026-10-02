@@ -3,7 +3,11 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { writeAudit } from "@/server/audit";
 import { db, type Tx } from "@/server/db";
-import { payoutTwoStepThresholdPaise } from "@/server/env";
+import {
+  cashfreePayoutsConfig,
+  isProductionDeployment,
+  payoutTwoStepThresholdPaise,
+} from "@/server/env";
 import { AppError } from "@/server/errors";
 import { getPayoutGateway } from "@/server/providers/payout-gateway";
 import { parseInput } from "@/server/validation";
@@ -38,13 +42,15 @@ export async function savePayoutMethod(actor: Actor | null, input: unknown) {
   });
   if (!isAdult(user.dateOfBirth)) throw new AppError("FORBIDDEN", MINOR_PAYOUT_MESSAGE);
   const data = parseInput(payoutMethodSchema, input);
-  // Beneficiary IDs are immutable at Cashfree, so each change registers a new one. Cashfree needs a
-  // mobile number: without one (Google sign-up, DECISIONS M33) the method is saved for prizes paid
-  // by hand and registered with Cashfree only when the player saves it again after adding a phone.
-  const beneficiaryId = user.phone
+  // Beneficiary IDs are immutable at Cashfree, so each change registers a new one. Registration
+  // needs a mobile number and Cashfree Payouts: without either (Google sign-up, or the live site
+  // before Cashfree is connected; DECISIONS M33) the method is saved for prizes paid by hand and
+  // registered when the player saves it again later.
+  const register = !!user.phone && (!!cashfreePayoutsConfig() || !isProductionDeployment());
+  const beneficiaryId = register
     ? `ben_${me.id}_${Date.now().toString(36)}`
     : `${UNREGISTERED_BENEFICIARY}${me.id}_${Date.now().toString(36)}`;
-  if (user.phone) {
+  if (register && user.phone) {
     await getPayoutGateway().addBeneficiary({
       beneficiaryId,
       name: data.accountHolderName,
@@ -311,7 +317,7 @@ export async function approvePayout(actor: Actor | null, input: unknown): Promis
     if (method.beneficiaryId.startsWith(UNREGISTERED_BENEFICIARY)) {
       throw new AppError(
         "CONFLICT",
-        "The winner has no mobile number, which Cashfree needs. Pay this prize by hand (Show UPI), or ask them to add their number and save their UPI again.",
+        "This UPI ID isn't registered with Cashfree (no mobile number, or Cashfree Payouts wasn't connected when it was saved). Pay this prize by hand (Show UPI), or ask the winner to save their UPI again.",
       );
     }
     if (!isAdult(payout.user.dateOfBirth)) throw new AppError("CONFLICT", MINOR_PAYOUT_MESSAGE);

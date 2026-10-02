@@ -336,6 +336,21 @@ describe("payout ledger", () => {
     });
   });
 
+  it("on the live site without Cashfree Payouts, saves the UPI for paying by hand instead of failing", async () => {
+    const env = { ...process.env };
+    process.env.VERCEL_ENV = "production";
+    delete process.env.CASHFREE_PAYOUTS_CLIENT_ID;
+    try {
+      const w = await createPlayer("BGMI", { dateOfBirth: new Date("1999-01-01T00:00:00Z") });
+      await savePayoutMethod(player(w), { kind: "UPI", accountHolderName: "Live One", vpa: "live@okaxis" });
+      const m = await testDb().payoutMethod.findUniqueOrThrow({ where: { userId: w.id } });
+      expect(m.beneficiaryId.startsWith("unregistered_")).toBe(true);
+      expect(m.vpa).toBe("live@okaxis");
+    } finally {
+      process.env = env;
+    }
+  });
+
   it("lets an admin reveal the winner's full UPI ID to pay by hand, audited without it (DECISIONS M32)", async () => {
     const { payout } = await winnerWithMethod(150000);
     await expect(revealPayoutUpi(mod, { payoutId: payout.id })).rejects.toMatchObject({ code: "FORBIDDEN" });
