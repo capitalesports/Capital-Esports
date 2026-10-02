@@ -5,8 +5,23 @@ import { SECURITY_HEADERS } from "./lib/security-headers";
 /** Image routes read fonts and delivered artwork from disk; make sure deployments ship those files. */
 const IMAGE_ROUTE_FILES = ["./assets/fonts/**", "./public/art/**", "./node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf"];
 
+/**
+ * Optional public settings. An unset NEXT_PUBLIC_* variable is left as a runtime lookup, so the
+ * code behind it (the lazily loaded Sentry SDK, the Firebase client) still ships; defaulting to ""
+ * lets the build drop it, the same on CI as with an empty value in .env.
+ */
+const OPTIONAL_PUBLIC_ENV = [
+  "NEXT_PUBLIC_SENTRY_DSN",
+  "NEXT_PUBLIC_FIREBASE_API_KEY",
+  "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+  "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+  "NEXT_PUBLIC_FIREBASE_APP_ID",
+  "NEXT_PUBLIC_PHONE_LOGIN",
+];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  env: Object.fromEntries(OPTIONAL_PUBLIC_ENV.map((key) => [key, process.env[key] ?? ""])),
   // Dev only: lets friends test through a temporary Cloudflare tunnel (npx cloudflared / trycloudflare).
   allowedDevOrigins: ["*.trycloudflare.com"],
   outputFileTracingIncludes: {
