@@ -28,7 +28,7 @@ import { gameProfileRecord, gameProfileSchema } from "@/lib/validators";
 import { notify, type NotificationEvent } from "./notify";
 import { trackOnce } from "./analytics";
 import { teamNameSchema } from "./teams";
-import { enterPendingPayment, executeRefunds, markRefund } from "./payments";
+import { enterPendingPayment } from "./payments";
 
 /** Registration statuses that occupy a slot. PENDING_PAYMENT holds the slot while paying (Phase 6). */
 export const SLOT_HOLDING: RegistrationStatus[] = ["CONFIRMED", "PENDING_PAYMENT"];
@@ -168,9 +168,16 @@ async function buildRoster(
     { gameId: captain.gameId, ign: captain.ign ?? captain.gameId, userId: captainId },
   ];
   for (const [i, p] of players.entries()) {
-    const parsed = gameProfileSchema.safeParse({ game: match.game, gameId: p.gameId, ign: p.ign, region: "AP" });
+    const parsed = gameProfileSchema.safeParse({
+      game: match.game,
+      gameId: p.gameId,
+      ign: p.ign,
+      region: "AP",
+    });
     if (!parsed.success) {
-      fieldErrors[`players.${i}`] = [parsed.error.issues[0]?.message ?? "Check this player's ID and name"];
+      fieldErrors[`players.${i}`] = [
+        parsed.error.issues[0]?.message ?? "Check this player's ID and name",
+      ];
       continue;
     }
     const record = gameProfileRecord(parsed.data);
@@ -200,7 +207,14 @@ async function buildRoster(
     select: {
       gameId: true,
       userId: true,
-      user: { select: { bannedAt: true, bannedUntil: true, registrationBlockedUntil: true, deletedAt: true } },
+      user: {
+        select: {
+          bannedAt: true,
+          bannedUntil: true,
+          registrationBlockedUntil: true,
+          deletedAt: true,
+        },
+      },
     },
   });
   for (const p of roster) {
@@ -221,7 +235,9 @@ async function buildRoster(
       select: { gameId: true },
     }),
   ]);
-  const taken = roster.filter((p) => (p.userId && clashIds.has(p.userId)) || clashIgns.some((c) => c.gameId === p.gameId));
+  const taken = roster.filter(
+    (p) => (p.userId && clashIds.has(p.userId)) || clashIgns.some((c) => c.gameId === p.gameId),
+  );
   if (taken.length) {
     throw new AppError(
       "CONFLICT",
@@ -341,7 +357,11 @@ export async function registerForMatch(
       if (status === "PENDING_PAYMENT") await enterPendingPayment(tx, reg, match, now);
       if (status === "CONFIRMED") {
         const linked = roster.flatMap((p) => (p.userId ? [p.userId] : []));
-        events.push({ type: "REGISTRATION_CONFIRMED", userIds: [...new Set([me.id, ...linked])], matchId });
+        events.push({
+          type: "REGISTRATION_CONFIRMED",
+          userIds: [...new Set([me.id, ...linked])],
+          matchId,
+        });
       }
       return { registrationId: reg.id, status };
     }
@@ -373,7 +393,12 @@ export async function registerForMatch(
 async function savedTeamFor(tx: Tx, teamId: string, userId: string, game: LockedMatch["game"]) {
   const team = await tx.team.findUnique({
     where: { id: teamId },
-    select: { id: true, name: true, game: true, members: { where: { userId, status: "CONFIRMED" } } },
+    select: {
+      id: true,
+      name: true,
+      game: true,
+      members: { where: { userId, status: "CONFIRMED" } },
+    },
   });
   if (!team || team.game !== game || !team.members.length) {
     throw new AppError("VALIDATION", "Choose one of your own teams for this game.", {
@@ -521,12 +546,14 @@ export async function respondToRoster(actor: Actor | null, input: unknown, now =
 
 const cancelSchema = z.object({ matchId: z.string().min(1) });
 
-/** Cancel my registration (or my team's, as captain) until registration closes; promotes the waitlist. */
+/**
+ * Cancel my registration (or my team's, as captain) until registration closes; promotes the
+ * waitlist. A paid entry fee is not refunded when the player cancels (DECISIONS M42).
+ */
 export async function cancelRegistration(actor: Actor | null, input: unknown, now = new Date()) {
   const me = assertUser(actor);
   const { matchId } = parseInput(cancelSchema, input);
   const events: NotificationEvent[] = [];
-  let refund: Awaited<ReturnType<typeof markRefund>> = null;
 
   await db.$transaction(async (tx) => {
     const match = await lockMatch(tx, matchId);
@@ -543,13 +570,12 @@ export async function cancelRegistration(actor: Actor | null, input: unknown, no
       data: { status: "CANCELLED", cancelledAt: now },
     });
     await tx.registrationMember.deleteMany({ where: { registrationId: reg.id } });
-    // Money: an unpaid attempt simply fails; a paid entry is refunded (cancelled before the close).
+    // Money: an unpaid attempt simply fails; a paid entry is kept, not refunded (M42).
     if (reg.paymentId) {
       await tx.payment.updateMany({
         where: { id: reg.paymentId, status: "CREATED" },
         data: { status: "FAILED" },
       });
-      refund = await markRefund(tx, reg.paymentId, "Player cancelled before registration closed");
     }
     if (SLOT_HOLDING.includes(reg.status)) {
       const promoted = await promoteWaitlist(tx, match);
@@ -557,7 +583,6 @@ export async function cancelRegistration(actor: Actor | null, input: unknown, no
     }
   });
 
-  if (refund) await executeRefunds([refund]);
   await Promise.all(events.map(notify));
 }
 

@@ -517,3 +517,10 @@ At the owner's request, unused code was removed. Every change was checked agains
   - `@prisma/client`: the generated client imports its runtime.
   - `pg`: the Prisma Postgres adapter.
   - Exports that are only used inside their own file: harmless, and some are kept on purpose for tests.
+
+### M42 No refund when a player cancels
+At the owner's request, a paid entry fee is refunded only when **we** cancel the match. This also covers the existing automatic refunds for a payment that arrives after the slot is gone, and for duplicate payments.
+- A player can still cancel before registration closes. Their slot goes to the waitlist, but the payment stays `PAID` and no refund is started.
+- An unpaid checkout attempt is still marked `FAILED`.
+- On a paid match, the cancel confirmation says the fee is not refunded.
+- The Refund policy and rule 11 on the Rules page say the same.

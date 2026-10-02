@@ -47,7 +47,7 @@ export const DEFAULT_CONTENT: Record<ContentKey, string> = {
 8. **Results.** Upload your result screenshot within 15 minutes after the match. No screenshot = no points.
 9. **Disputes.** Report a problem from the match page within 2 hours of the result being posted, with proof. The moderator's decision is final.
 10. **Respect.** No abuse or spam. Toxic behaviour = warning, then ban.
-11. **Refunds.** Full refund if we cancel the match, or if you cancel your registration before registration closes. No refund for no-shows, disconnects, or network or device problems. See the [Refund policy](/refund-policy).
+11. **Refunds.** Only if we cancel the match. No refund if you cancel your registration, and none for no-shows, disconnects, or network or device problems. See the [Refund policy](/refund-policy).
 12. **Prizes.** Sent to the winner's (for teams, the captain's) verified UPI or bank account within 2 working days after results are final.
 13. **Streaming.** We may stream and record matches.
 14. **Rules may change.** The rules shown here at match time apply.
@@ -174,13 +174,13 @@ This policy covers entry fees paid on capitalesports.in. Free matches have nothi
 ## Full refund
 
 - **Match cancelled by us:** if we cancel a match for any reason, every entry fee is refunded in full, automatically.
-- **You cancel in time:** if you cancel your registration on the match page before registration closes, your entry fee is refunded in full.
 - **Paid but no slot:** if your payment succeeded but your slot was not confirmed (for example, the match filled up while you were paying), the amount is refunded in full.
 - **Charged twice:** a duplicate payment for the same slot is refunded in full.
 
 ## No refund
 
-- After registration closes, including if you do not turn up (no-show).
+- If you cancel your own registration. You can still cancel before registration closes to free your slot for the waitlist, but the entry fee is not refunded.
+- If you do not turn up (no-show).
 - If you are disqualified or banned for breaking the fair-play rules.
 - If you cannot join or play because of your own device, internet connection or game account.
 

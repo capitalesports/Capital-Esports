@@ -275,8 +275,8 @@ export function RegistrationPanel({
     case "ON_ROSTER":
       return (
         <p className="text-sm">
-          You play for <strong>{state.teamName}</strong> (captain {state.captainName}). Team
-          status: {STATUS_TEXT[state.registrationStatus] ?? state.registrationStatus}.
+          You play for <strong>{state.teamName}</strong> (captain {state.captainName}). Team status:{" "}
+          {STATUS_TEXT[state.registrationStatus] ?? state.registrationStatus}.
         </p>
       );
     case "REGISTERED":
@@ -301,7 +301,9 @@ export function RegistrationPanel({
                 {state.roster.map((r) => (
                   <li key={r.name}>
                     {r.name}
-                    {r.igl ? <span className="text-gold ml-1 text-xs font-semibold">IGL</span> : null}{" "}
+                    {r.igl ? (
+                      <span className="text-gold ml-1 text-xs font-semibold">IGL</span>
+                    ) : null}{" "}
                     — {r.status.toLowerCase()}
                   </li>
                 ))}
@@ -316,7 +318,9 @@ export function RegistrationPanel({
               onClick={() => {
                 if (
                   confirm(
-                    "Cancel your registration? Your slot goes to the next player on the waitlist.",
+                    entryFeePaise > 0
+                      ? "Cancel your registration? Your slot goes to the next player on the waitlist. The entry fee is NOT refunded when you cancel."
+                      : "Cancel your registration? Your slot goes to the next player on the waitlist.",
                   )
                 )
                   void cancel.run({ matchId });
