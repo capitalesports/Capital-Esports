@@ -39,7 +39,8 @@ function sendErrorMessage(code: string | undefined): string {
     // SMS region not allowed / SMS sign-in off / no billing: a set-up problem, not the player's.
     case "auth/operation-not-allowed":
     case "auth/billing-not-enabled":
-      return "SMS login isn't available for this number yet. Please use “Continue with Google”.";
+      // The code in brackets tells staff what to fix in Firebase; players can ignore it.
+      return `SMS login isn't available for this number yet. Please use “Continue with Google”. (${code})`;
     case "auth/captcha-check-failed":
     case "auth/invalid-app-credential":
       return "The security check failed. Refresh the page and try again.";
