@@ -60,7 +60,7 @@ export default async function AdminAuditPage({ searchParams }: PageProps<"/admin
             id="a-actor"
             name="actor"
             defaultValue={filters.actor}
-            placeholder="name, phone or system"
+            placeholder="name, email or system"
           />
         </div>
         <div className="space-y-1">

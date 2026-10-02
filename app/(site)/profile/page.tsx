@@ -44,7 +44,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Your profile"
-        description={`Logged in as ${user.phone ? maskPhone(user.phone) : user.email ? maskEmail(user.email) : "you"}`}
+        description={`Logged in as ${user.email ? maskEmail(user.email) : user.phone ? maskPhone(user.phone) : "you"}`}
       >
         <LogoutButton />
       </PageHeader>
@@ -116,8 +116,8 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
           Delete account
         </h2>
         <p className="text-muted-foreground text-sm">
-          Team captains must hand over captaincy or disband their team first. Accounts with a
-          prize payout in progress can be deleted once it is paid.
+          Team captains must hand over captaincy or disband their team first. Accounts with a prize
+          payout in progress can be deleted once it is paid.
         </p>
         <DeleteAccountDialog />
       </section>

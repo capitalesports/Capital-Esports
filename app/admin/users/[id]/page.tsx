@@ -34,7 +34,7 @@ export default async function AdminUserPage({ params }: PageProps<"/admin/users/
     <>
       <PageHeader
         title={user.displayName ?? "(no name)"}
-        description={`${user.phone ?? user.email ?? "No phone"} · ${user.role} · joined ${formatIST(user.createdAt)}`}
+        description={`${user.email ?? user.phone ?? "No email"} · ${user.role} · joined ${formatIST(user.createdAt)}`}
       />
       {user.deletedAt ? (
         <p className="bg-muted mb-4 rounded-lg p-3 text-sm">

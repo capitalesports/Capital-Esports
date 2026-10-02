@@ -27,12 +27,12 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
 
   return (
     <>
-      <PageHeader title="Users" description="Search by phone, name or game ID." />
+      <PageHeader title="Users" description="Search by name, email or game ID." />
       <form method="get" role="search" className="mb-4 flex gap-2">
         <Input
           name="q"
           defaultValue={query}
-          placeholder="98765…, email, name, UID or Name#Tag"
+          placeholder="Email, name, UID or Name#Tag"
           aria-label="Search users"
         />
         <Button type="submit" variant="secondary">
@@ -44,7 +44,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Phone / email</TableHead>
+              <TableHead>Email</TableHead>
               <TableHead>Game IDs</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>State</TableHead>
@@ -59,9 +59,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
                   </Link>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
-                  {u.phone ?? (
-                    <span className="text-muted-foreground">{u.email ?? "—"} · Google</span>
-                  )}
+                  {u.email ?? <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-xs">
                   {u.gameProfiles

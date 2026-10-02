@@ -135,36 +135,43 @@ export function ContactDetails({
 
   return (
     <div className="space-y-3">
-      <Row
-        icon={<PhoneIcon className="size-5" />}
-        label={phone ? "Phone (used to log in)" : "Phone (optional)"}
-        actions={
-          // Adding or changing a phone sends an SMS, which is off without Firebase billing.
-          editing === "phone" || !phoneLoginEnabled() ? null : (
-            <Button type="button" variant="outline" onClick={() => setEditing("phone")}>
-              {phone ? "Change" : "Add"}
-            </Button>
-          )
-        }
-      >
-        {phone ? (
-          <>
-            <Revealable shown={formatPhone(phone)} masked={maskPhone(phone)} what="phone number" />
-            <VerifiedBadge />
-          </>
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            Not added. You only need it to pay entry fees for paid matches.
-          </p>
-        )}
-      </Row>
-      {editing === "phone" ? (
-        <div className="bg-background/40 space-y-3 rounded-lg p-3">
-          <ChangePhoneForm current={phone} />
-          <Button type="button" variant="ghost" onClick={() => setEditing(null)}>
-            Cancel
-          </Button>
-        </div>
+      {phoneLoginEnabled() ? (
+        <>
+          <Row
+            icon={<PhoneIcon className="size-5" />}
+            label={phone ? "Phone (used to log in)" : "Phone (optional)"}
+            actions={
+              editing === "phone" ? null : (
+                <Button type="button" variant="outline" onClick={() => setEditing("phone")}>
+                  {phone ? "Change" : "Add"}
+                </Button>
+              )
+            }
+          >
+            {phone ? (
+              <>
+                <Revealable
+                  shown={formatPhone(phone)}
+                  masked={maskPhone(phone)}
+                  what="phone number"
+                />
+                <VerifiedBadge />
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Not added. You only need it to pay entry fees for paid matches.
+              </p>
+            )}
+          </Row>
+          {editing === "phone" ? (
+            <div className="bg-background/40 space-y-3 rounded-lg p-3">
+              <ChangePhoneForm current={phone} />
+              <Button type="button" variant="ghost" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       <Row

@@ -20,6 +20,7 @@ export function auditWhere(f: AuditFilters): Prisma.AuditLogWhereInput {
     where.actor = {
       OR: [
         { displayName: { contains: f.actor, mode: "insensitive" } },
+        { email: { contains: f.actor, mode: "insensitive" } },
         { phone: { contains: f.actor.replace(/\D/g, "") || f.actor } },
       ],
     };

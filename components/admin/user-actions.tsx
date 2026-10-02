@@ -45,7 +45,7 @@ export function BanControls({ userId, banned }: { userId: string; banned: boolea
   return (
     <Box title="Ban">
       <p className="text-muted-foreground text-sm">
-        Bans the account and blocks its phone and every game ID from re-registering.
+        Bans the account and blocks its email and every game ID from re-registering.
       </p>
       <form
         className="space-y-3"
@@ -80,7 +80,13 @@ export function BanControls({ userId, banned }: { userId: string; banned: boolea
 }
 
 /** Support: correct a player's date of birth (players can't change it once saved). */
-export function DobControls({ userId, dateOfBirth }: { userId: string; dateOfBirth: string | null }) {
+export function DobControls({
+  userId,
+  dateOfBirth,
+}: {
+  userId: string;
+  dateOfBirth: string | null;
+}) {
   const [dob, setDob] = useState(dateOfBirth ?? "");
   const { run, pending, fieldErrors } = useAction(setUserDateOfBirthAction);
   return (

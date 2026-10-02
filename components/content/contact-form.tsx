@@ -43,7 +43,7 @@ export function ContactForm() {
       <FormField
         id="c-contact"
         label="How can we reach you?"
-        help="Phone, email or Discord username"
+        help="Email or Discord username"
         errors={fieldErrors.contact}
       >
         <Input

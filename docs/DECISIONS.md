@@ -476,3 +476,4 @@ New Firebase projects send no SMS at all until a billing account (Blaze plan) is
 - `NEXT_PUBLIC_PHONE_LOGIN=off` hides phone login on the login page and the "Add/Change phone" button on the profile. Players sign up and log in with Google. Staff can still use "Log in with email instead" for the password login.
 - Players who already have a phone keep it, and it is still shown on their profile.
 - Production sets it to `off`. Once billing is linked, remove the variable (or set `on`) and redeploy; nothing else changes.
+- At the owner's request ("remove phone from everywhere"), the switch also hides the whole Phone row on the profile. Wording across the site now speaks of Google and email: the FAQ, privacy text, contact form, the profile's "Logged in as", and the admin user list, user page, audit search and ban text. Phone data and the phone login code stay in place behind the switch, so turning it back on needs no code change.

@@ -110,7 +110,7 @@ export default async function AdminHomePage() {
     <>
       <PageHeader
         title="Admin"
-        description={`Signed in as ${user.displayName ?? user.phone ?? user.email ?? "admin"} (${user.role.toLowerCase()}).`}
+        description={`Signed in as ${user.displayName ?? user.email ?? user.phone ?? "admin"} (${user.role.toLowerCase()}).`}
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((s) => (
@@ -126,9 +126,7 @@ export default async function AdminHomePage() {
             <p className="text-3xl font-bold">
               {s.value}
               {s.detail ? (
-                <span className="text-muted-foreground ml-2 text-base font-normal">
-                  {s.detail}
-                </span>
+                <span className="text-muted-foreground ml-2 text-base font-normal">{s.detail}</span>
               ) : null}
             </p>
           </Link>

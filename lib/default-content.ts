@@ -56,11 +56,11 @@ export const DEFAULT_CONTENT: Record<ContentKey, string> = {
 - You can dispute results within 2 hours of them being posted. A moderator reviews and may correct points.`,
   faq: `## How do I register?
 
-Log in with your phone number, complete your profile with your game ID, then open a scrim and tap Register.
+Log in with Google, complete your profile with your game ID, then open a scrim and tap Register.
 
 ## When do I get the room ID and password?
 
-15 minutes before the start, on the match page and your dashboard — only for confirmed players.
+As soon as the admin posts them, on the match page and your dashboard — only for confirmed players.
 
 ## Is it free?
 
@@ -70,7 +70,7 @@ Scrims are free to enter unless the match shows an entry fee.`,
 These terms are a placeholder and must be replaced with terms reviewed by a lawyer before launch.`,
   privacy: `## Privacy policy
 
-We collect your phone number, display name, date of birth and game IDs to run matches and prevent multiple accounts. We never show your phone number or date of birth publicly.
+We collect your Google name and email, date of birth and game IDs to run matches and prevent multiple accounts. We never show your email or date of birth publicly.
 
 This policy is a placeholder and must be reviewed by a lawyer before launch.`,
   "refund-policy": `## Refund policy
