@@ -2,6 +2,9 @@
 export const SITE_NAME = "Capital Esports";
 export const BRAND_ACCENT = "Capital";
 export const BRAND_REST = "Esports";
+/** Shown on the contact page and in the legal pages (lib/default-content.ts). */
+export const SUPPORT_EMAIL = "capitalesportssupport@gmail.com";
+export const SUPPORT_LOCATION = "New Delhi, India";
 export const SITE_TAGLINE = "Play Daily Scrims · Weekly Tournaments · Climb the Leaderboard";
 
 export const SOCIAL_PLATFORMS = [

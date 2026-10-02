@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
+import { MailIcon, MapPinIcon } from "lucide-react";
 import { PageHeader } from "@/components/common/page-header";
 import { ContactForm } from "@/components/content/contact-form";
 import { Button } from "@/components/ui/button";
 import { getSocialLinks } from "@/server/services/content";
-import { SOCIAL_LABELS } from "@/lib/site";
+import { SOCIAL_LABELS, SUPPORT_EMAIL, SUPPORT_LOCATION } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Contact & support",
-  description: "Reach the team through the form, WhatsApp or Discord.",
+  description: "Reach the team by email, the contact form, WhatsApp or Discord.",
 };
 
 export default async function ContactPage() {
@@ -20,6 +21,25 @@ export default async function ContactPage() {
         title="Contact & support"
         description="Questions about a match, a payment or your account? Send us a message."
       />
+      <section aria-label="Support details" className="card-ds mb-6 space-y-3 p-4 text-sm">
+        <p className="flex items-center gap-2">
+          <MailIcon aria-hidden className="text-gold size-4 shrink-0" />
+          <span>
+            Email:{" "}
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="text-primary font-medium underline-offset-4 hover:underline"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+          </span>
+        </p>
+        <p className="flex items-center gap-2">
+          <MapPinIcon aria-hidden className="text-gold size-4 shrink-0" />
+          <span>Capital Esports, {SUPPORT_LOCATION}</span>
+        </p>
+        <p className="text-muted-foreground">We reply within 1–2 working days.</p>
+      </section>
       {socials.length ? (
         <div className="mb-6 flex flex-wrap gap-2">
           {socials.map((s) => (
