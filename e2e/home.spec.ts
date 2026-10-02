@@ -106,7 +106,7 @@ test.describe("home page (desktop, home-desktop.png)", () => {
     await page.goto("/");
     const hero = page.getByRole("region", { name: "Capital Esports" });
     await expect(hero.getByText("India's biggest")).toBeVisible();
-    await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/Esports\s*Platform/);
+    await expect(hero.getByRole("heading", { level: 1 })).toHaveText(/Capital\s*Esports/);
     await expect(
       hero.getByText("Play Daily Scrims · Weekly Tournaments · Climb the Leaderboard"),
     ).toBeVisible();

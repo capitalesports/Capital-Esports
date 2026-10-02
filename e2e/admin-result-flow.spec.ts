@@ -37,7 +37,6 @@ test("admin creates a match, approves its result, and the leaderboard updates", 
   await page.goto(`/admin/results/${matchId}`);
   for (const [i, p] of players.entries()) {
     const card = page.getByRole("article", { name: `Result for ${p.displayName}` });
-    await card.getByLabel("Did not play (no-show)").click();
     await card.getByLabel("Placement").fill(String(i + 1));
     await card.getByLabel("Kills").fill(String(5 - i * 3));
   }

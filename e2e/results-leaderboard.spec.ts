@@ -51,19 +51,21 @@ test("player submits a result, admin approves, the leaderboard updates, reopenin
   await form.getByRole("button", { name: "Submit result" }).click();
   await expect(page.getByText("Result submitted. A moderator will review it.")).toBeVisible();
 
-  // Admin reviews: sets player 2 (2nd, 1 kill), leaves player 3 as a no-show, approves.
+  // Admin reviews: sets player 2 (2nd, 1 kill), marks player 3 as a no-show, approves.
   await as(page, "9999900001", `/admin/results/${matchId}`);
   await page.goto(`/admin/results/${matchId}`);
   const card1 = page.getByRole("article", { name: `Result for ${PLAYERS[0]!.name}` });
   await expect(card1.getByLabel("Placement")).toHaveValue("1");
   await expect(card1.getByRole("img")).toBeVisible();
   const card2 = page.getByRole("article", { name: `Result for ${PLAYERS[1]!.name}` });
-  await card2.getByLabel("Did not play (no-show)").click();
   await card2.getByLabel("Placement").fill("1");
   await card2.getByLabel("Kills").fill("1");
   await expect(page.getByRole("alert").filter({ hasText: "Placement conflict: 1" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve and post points" })).toBeDisabled();
   await card2.getByLabel("Placement").fill("2");
+  // Nobody starts as a no-show (DECISIONS M22): the admin ticks it.
+  const card3 = page.getByRole("article", { name: `Result for ${PLAYERS[2]!.name}` });
+  await card3.getByLabel("Did not play (no-show)").check();
   await page.getByRole("button", { name: "Approve and post points" }).click();
   await expect(page.getByText("Results approved and points posted")).toBeVisible();
 
