@@ -67,7 +67,7 @@ const ROUTE_MUTATIONS: Record<string, string> = {
   "app/api/auth/email/verify/route.ts":
     "hashed one-time code (10 min, 5 tries, single use), same-origin check, IP rate limit, ban checks",
   "app/api/auth/google/route.ts":
-    "Google ID token verified server-side (Firebase Admin; stub only off-production), same-origin check, IP rate limit, ban checks; new players only get a signed 30-min signup cookie",
+    "Google ID token verified server-side (jose against Google's securetoken keys; stub only off-production), same-origin check, IP rate limit, ban checks",
   "app/api/auth/password/route.ts":
     "scrypt hashes, verified email required, same answer for unknown email/no password/wrong password, same-origin check, rate limits per IP and email, ban checks",
   "app/api/auth/signup/route.ts":

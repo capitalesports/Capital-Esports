@@ -46,13 +46,6 @@ export function getActiveSponsors() {
   });
 }
 
-export function getActiveCarouselItems() {
-  return db.carouselItem.findMany({
-    where: { active: true },
-    orderBy: [{ order: "asc" }, { createdAt: "desc" }],
-  });
-}
-
 // ---------- admin mutations ----------
 
 export async function saveContent(actor: Actor | null, input: unknown) {

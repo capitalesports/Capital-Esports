@@ -17,13 +17,6 @@ const dateTimeFmt = new Intl.DateTimeFormat("en-IN", {
   hour12: true,
 });
 
-const timeFmt = new Intl.DateTimeFormat("en-IN", {
-  timeZone: IST_TIME_ZONE,
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
-
 const dateFmt = new Intl.DateTimeFormat("en-IN", {
   timeZone: IST_TIME_ZONE,
   weekday: "long",
@@ -34,11 +27,6 @@ const dateFmt = new Intl.DateTimeFormat("en-IN", {
 /** "Sat, 27 Sept, 6:30 pm IST" */
 export function formatIST(date: Date): string {
   return `${dateTimeFmt.format(date)} IST`;
-}
-
-/** "6:30 pm" */
-export function formatTimeIST(date: Date): string {
-  return timeFmt.format(date);
 }
 
 /** "Saturday, 27 September" */

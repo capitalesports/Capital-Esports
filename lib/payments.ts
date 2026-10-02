@@ -47,7 +47,6 @@ export const payoutMethodSchema = z.discriminatedUnion("kind", [
       .refine((v) => IFSC_REGEX.test(v), "Enter a valid IFSC, e.g. HDFC0001234"),
   }),
 ]);
-export type PayoutMethodInput = z.infer<typeof payoutMethodSchema>;
 
 /** "ravikumar@okaxis" -> "ra******@okaxis" */
 export function maskVpa(vpa: string): string {

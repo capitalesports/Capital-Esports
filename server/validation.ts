@@ -10,10 +10,3 @@ export function parseInput<S extends z.ZodType>(schema: S, input: unknown): z.ou
   const first = flat.formErrors[0] ?? Object.values(fieldErrors).flat()[0] ?? "Invalid input";
   throw new AppError("VALIDATION", first, fieldErrors);
 }
-
-/** FormData -> plain object (last value wins; files kept as File). */
-export function formDataToObject(form: FormData): Record<string, FormDataEntryValue> {
-  const out: Record<string, FormDataEntryValue> = {};
-  for (const [k, v] of form.entries()) out[k] = v;
-  return out;
-}

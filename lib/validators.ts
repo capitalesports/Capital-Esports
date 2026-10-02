@@ -6,25 +6,11 @@ import {
   isValidRiotId,
   MAX_AGE,
   MIN_AGE,
-  normalizePhone,
   parseRiotId,
   VALORANT_REGIONS,
 } from "./input-rules";
 
 export * from "./input-rules";
-
-// ---------------------------------------------------------------------------
-// Phone
-// ---------------------------------------------------------------------------
-
-export const phoneSchema = z.string().transform((v, ctx) => {
-  const phone = normalizePhone(v);
-  if (!phone) {
-    ctx.addIssue({ code: "custom", message: "Enter a valid mobile number" });
-    return z.NEVER;
-  }
-  return phone;
-});
 
 // ---------------------------------------------------------------------------
 // Profile

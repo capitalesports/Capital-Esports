@@ -65,10 +65,6 @@ export const MANUAL_TRANSITIONS: readonly MatchStatus[] = [
   "CANCELLED",
 ];
 
-export function isTerminal(status: MatchStatus): boolean {
-  return status === "CANCELLED";
-}
-
 /** Statuses in which match details may still be edited. */
 export function isEditable(status: MatchStatus): boolean {
   return (

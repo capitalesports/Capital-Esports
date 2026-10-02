@@ -502,3 +502,18 @@ At the owner's request, nobody outside the staff should see that an admin panel 
 - Players who are logged in already got a 404 (`requireStaffPage`), and moderators get one on admin-only sections.
 - **Staff log in at `/login` first**, then open `/admin`. There is no separate admin login page, so nothing on the public site points to the panel.
 - Server actions and route handlers still check the role on every call, so hiding the pages is an extra layer, not the protection itself.
+
+### M41 Code clean-up
+At the owner's request, unused code was removed. Every change was checked against typecheck, lint, all unit/integration tests, the full e2e suite and the bundle budget, with no change in behaviour.
+- **Removed:**
+  - Functions nothing called: `isTerminal`, `formatTimeIST`, `phoneSchema`, `clearSessionCookie`, `getActiveCarouselItems`, `formDataToObject`, `confirmedCount` (server query).
+  - Three unused type aliases.
+  - Six shadcn components no page used (avatar, badge, card, select, separator, tabs). Add them back with the shadcn CLI if needed.
+  - The `firebase-admin` dependency: tokens are verified with `jose` since M36 (125 fewer packages).
+- **Kept, although `knip` lists them:**
+  - `public/sw.js`: the service worker, loaded by URL.
+  - `scripts/set-staff-password.ts`: run by hand.
+  - `tests/stubs/server-only.ts`: a Vitest alias.
+  - `@prisma/client`: the generated client imports its runtime.
+  - `pg`: the Prisma Postgres adapter.
+  - Exports that are only used inside their own file: harmless, and some are kept on purpose for tests.

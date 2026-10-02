@@ -42,7 +42,6 @@ export function ageOn(dob: Date, now: Date): number {
 }
 
 export const VALORANT_REGIONS = ["AP", "EU", "NA", "KR", "LATAM", "BR"] as const;
-export type ValorantRegion = (typeof VALORANT_REGIONS)[number];
 
 export interface RiotId {
   name: string;

@@ -40,10 +40,6 @@ export const publicMatchSelect = {
 
 export type PublicMatch = Prisma.MatchGetPayload<{ select: typeof publicMatchSelect }>;
 
-export function confirmedCount(m: PublicMatch): number {
-  return m._count.registrations;
-}
-
 /** Scrims from today (IST) through the next 3 days. */
 export async function listUpcomingScrims(
   filters: { game?: Game | null; mode?: MatchMode | null } = {},

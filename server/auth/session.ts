@@ -22,10 +22,6 @@ export async function issueSessionCookie(
   };
 }
 
-export async function clearSessionCookie(): Promise<void> {
-  (await cookies()).delete(SESSION_COOKIE);
-}
-
 const sessionUserSelect = {
   id: true,
   phone: true,

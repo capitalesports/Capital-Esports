@@ -122,4 +122,3 @@ export const homeSettingsSchema = z.object({
   taglineBgmi: tagline,
   taglineValorant: tagline,
 });
-export type HomeSettingsInput = z.input<typeof homeSettingsSchema>;
