@@ -9,7 +9,14 @@ import { Label } from "@/components/ui/label";
 import { normalizePhone, safeReturnTo } from "@/lib/input-rules";
 import { EmailLoginForm } from "./email-login-form";
 import { GoogleLogin } from "./google-login";
-import { createOtpClient, OtpError, otpMode, STUB_OTP_CODE, type OtpClient } from "./otp-client";
+import {
+  createOtpClient,
+  OtpError,
+  otpMode,
+  phoneLoginEnabled,
+  STUB_OTP_CODE,
+  type OtpClient,
+} from "./otp-client";
 import { useCountdown } from "./use-countdown";
 
 const RESEND_COOLDOWN_MS = 30_000;
@@ -25,6 +32,21 @@ export function LoginForm({ returnTo }: { returnTo: string | null }) {
   const [method, setMethod] = useState<"phone" | "email">("phone");
   if (method === "email") {
     return <EmailLoginForm returnTo={returnTo} onUsePhone={() => setMethod("phone")} />;
+  }
+  if (!phoneLoginEnabled()) {
+    return (
+      <div className="mx-auto w-full max-w-sm">
+        <GoogleLogin returnTo={returnTo} />
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4 w-full"
+          onClick={() => setMethod("email")}
+        >
+          Log in with email instead
+        </Button>
+      </div>
+    );
   }
   return (
     <div className="mx-auto w-full max-w-sm">

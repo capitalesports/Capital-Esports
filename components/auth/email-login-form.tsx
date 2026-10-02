@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { normalizeEmail, safeReturnTo } from "@/lib/input-rules";
-import { otpMode } from "./otp-client";
+import { otpMode, phoneLoginEnabled } from "./otp-client";
 import { useCountdown } from "./use-countdown";
 
 const RESEND_COOLDOWN_MS = 30_000;
@@ -219,7 +219,7 @@ export function EmailLoginForm({
         {withPassword ? "Email me a code instead" : "Staff? Log in with password"}
       </Button>
       <Button type="button" variant="outline" className="mt-2 w-full" onClick={onUsePhone}>
-        Use phone number instead
+        {phoneLoginEnabled() ? "Use phone number instead" : "Back to Google login"}
       </Button>
       {otpMode() === "stub" && !withPassword ? (
         <p className="border-border text-muted-foreground mt-6 rounded-md border border-dashed p-3 text-xs">

@@ -43,7 +43,9 @@ export function GoogleLogin({ returnTo }: { returnTo: string | null }) {
     try {
       await finish(await googleIdTokenFromPopup());
     } catch (e) {
-      setError(e instanceof GoogleSignInError ? e.message : "Google sign-in failed. Please try again.");
+      setError(
+        e instanceof GoogleSignInError ? e.message : "Google sign-in failed. Please try again.",
+      );
     } finally {
       setBusy(false);
     }

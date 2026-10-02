@@ -470,3 +470,9 @@ Production runs on Vercel (region `sin1`, next to the Neon Postgres database) at
 On Vercel, `firebase-admin/auth` fails to load (its `jwks-rsa` dependency `require()`s the ESM-only `jose`), which broke Google and phone login in production with "Something went wrong."
 - `server/auth/firebase-id-token.ts` now verifies the token the way Firebase documents: RS256 against Google's securetoken public keys, with issuer `https://securetoken.google.com/<project>` and audience `<project>`. Both the OTP and the Google verifiers use it.
 - The revocation check (`verifyIdToken(token, true)`) is dropped. Sign-in still requires a token from the last 10 minutes, and bans are enforced by our own `Ban` table, so nothing a revocation check caught is lost.
+
+### M37 Phone login switch
+New Firebase projects send no SMS at all until a billing account (Blaze plan) is linked (`auth/billing-not-enabled`). The owner chose to stay on the free plan for now.
+- `NEXT_PUBLIC_PHONE_LOGIN=off` hides phone login on the login page and the "Add/Change phone" button on the profile. Players sign up and log in with Google. Staff can still use "Log in with email instead" for the password login.
+- Players who already have a phone keep it, and it is still shown on their profile.
+- Production sets it to `off`. Once billing is linked, remove the variable (or set `on`) and redeploy; nothing else changes.

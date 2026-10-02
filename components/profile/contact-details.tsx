@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { formatPhone, maskEmail, maskPhone } from "@/lib/contact-display";
 import { normalizeEmail } from "@/lib/input-rules";
+import { phoneLoginEnabled } from "@/components/auth/otp-client";
 import { ChangePhoneForm } from "./change-phone-form";
 
 function VerifiedBadge() {
@@ -27,7 +28,15 @@ function VerifiedBadge() {
 }
 
 /** The value, masked until the player taps the eye (their own screen may be seen or shared). */
-export function Revealable({ shown, masked, what }: { shown: string; masked: string; what: string }) {
+export function Revealable({
+  shown,
+  masked,
+  what,
+}: {
+  shown: string;
+  masked: string;
+  what: string;
+}) {
   const [visible, setVisible] = useState(false);
   return (
     <span className="inline-flex items-center gap-1">
@@ -130,7 +139,8 @@ export function ContactDetails({
         icon={<PhoneIcon className="size-5" />}
         label={phone ? "Phone (used to log in)" : "Phone (optional)"}
         actions={
-          editing === "phone" ? null : (
+          // Adding or changing a phone sends an SMS, which is off without Firebase billing.
+          editing === "phone" || !phoneLoginEnabled() ? null : (
             <Button type="button" variant="outline" onClick={() => setEditing("phone")}>
               {phone ? "Change" : "Add"}
             </Button>
@@ -247,7 +257,7 @@ export function ContactDetails({
       ) : null}
 
       {email ? (
-        <div className="flex min-h-tap items-center justify-between gap-4 pt-1">
+        <div className="min-h-tap flex items-center justify-between gap-4 pt-1">
           <Label htmlFor="email-optin" className="font-normal">
             Email me about slots, room IDs, results and prizes
           </Label>
