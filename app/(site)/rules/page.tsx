@@ -49,10 +49,7 @@ export default async function RulesPage({ searchParams }: PageProps<"/rules">) {
         </h2>
         <Markdown className="text-base">{gameRules || DEFAULT_CONTENT[key]}</Markdown>
       </section>
-      <section
-        aria-label="Scoring, no-shows and disputes"
-        className="border-border mt-10 border-t pt-6"
-      >
+      <section aria-label="General rules and scoring" className="border-border mt-10 border-t pt-6">
         <Markdown className="text-base">{general || DEFAULT_CONTENT["rules.general"]}</Markdown>
       </section>
     </div>
