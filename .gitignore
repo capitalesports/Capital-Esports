@@ -56,3 +56,11 @@ next-env.d.ts
 
 # design artwork copied from docs/design/assets by scripts/sync-art.mjs
 /public/art/
+
+.vercel
+.env*
+
+# AI coding-agent files added by tools (not part of the site)
+/.agents/
+/.claude/
+/skills-lock.json

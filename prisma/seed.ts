@@ -1,6 +1,6 @@
 /**
  * Seed: one admin (ADMIN_PHONE), one active season per game, points tables, home page settings,
- * 6 sample matches over the next 3 days.
+ * 6 sample matches over the next 3 days (skipped with SEED_SAMPLE_MATCHES=false, for the live site).
  * Idempotent: safe to run repeatedly.
  */
 import "dotenv/config";
@@ -50,6 +50,8 @@ export async function seed(prisma: PrismaClient, now = new Date()) {
     await prisma.siteContent.upsert({ where: { key }, create: { key, body }, update: {} });
   }
 
+  // The live site starts without demo matches: SEED_SAMPLE_MATCHES=false.
+  if (process.env.SEED_SAMPLE_MATCHES === "false") return { admin, createdMatches: 0 };
   const existing = await prisma.match.count();
   if (existing > 0) return { admin, createdMatches: 0 };
 

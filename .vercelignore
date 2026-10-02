@@ -1,0 +1,19 @@
+# Never upload secrets or local-only files with `vercel deploy` (DECISIONS M35).
+.env
+.env.*
+!.env.example
+.uploads
+.next
+node_modules
+generated
+coverage
+test-results
+playwright-report
+blob-report
+public/art
+.agents
+.claude
+skills-lock.json
+*.zip
+*.log
+*.tmp.mjs
