@@ -65,9 +65,7 @@ As soon as the admin posts them, on the match page and your dashboard — only f
 ## Is it free?
 
 Scrims are free to enter unless the match shows an entry fee.`,
-  terms: `## Terms of service
-
-*Last updated: 3 October 2026*
+  terms: `*Last updated: 3 October 2026*
 
 These terms apply to everyone who uses capitalesports.in ("Capital Esports", "we", "us"). Capital Esports is run from New Delhi, India. By creating an account or registering for a match you agree to them.
 
@@ -127,9 +125,7 @@ We may update these terms. The date at the top shows the latest version. Continu
 ### 11. Contact
 
 Questions about these terms: **capitalesportssupport@gmail.com**. These terms are governed by the laws of India, and the courts of New Delhi have jurisdiction.`,
-  privacy: `## Privacy policy
-
-*Last updated: 3 October 2026*
+  privacy: `*Last updated: 3 October 2026*
 
 This policy explains what Capital Esports (capitalesports.in, New Delhi, India) collects, why, and the choices you have.
 
@@ -168,9 +164,7 @@ Players under 18 should use the site with a parent's or guardian's permission. P
 ### Changes
 
 We may update this policy. The date at the top shows the latest version.`,
-  "refund-policy": `## Refund policy
-
-*Last updated: 3 October 2026*
+  "refund-policy": `*Last updated: 3 October 2026*
 
 This policy covers entry fees paid on capitalesports.in. Free matches have nothing to refund.
 
