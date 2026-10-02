@@ -9,14 +9,8 @@ import { Label } from "@/components/ui/label";
 import { normalizePhone, safeReturnTo } from "@/lib/input-rules";
 import { EmailLoginForm } from "./email-login-form";
 import { GoogleLogin } from "./google-login";
-import {
-  createOtpClient,
-  OtpError,
-  otpMode,
-  phoneLoginEnabled,
-  STUB_OTP_CODE,
-  type OtpClient,
-} from "./otp-client";
+import { phoneLoginEnabled } from "@/lib/phone-login";
+import { createOtpClient, OtpError, otpMode, STUB_OTP_CODE, type OtpClient } from "./otp-client";
 import { useCountdown } from "./use-countdown";
 
 const RESEND_COOLDOWN_MS = 30_000;

@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { formatPhone, maskEmail, maskPhone } from "@/lib/contact-display";
 import { normalizeEmail } from "@/lib/input-rules";
-import { phoneLoginEnabled } from "@/components/auth/otp-client";
+import { phoneLoginEnabled } from "@/lib/phone-login";
 import { ChangePhoneForm } from "./change-phone-form";
 
 function VerifiedBadge() {

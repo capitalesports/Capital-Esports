@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { normalizeEmail, safeReturnTo } from "@/lib/input-rules";
-import { otpMode, phoneLoginEnabled } from "./otp-client";
+import { phoneLoginEnabled } from "@/lib/phone-login";
+import { otpMode } from "./otp-client";
 import { useCountdown } from "./use-countdown";
 
 const RESEND_COOLDOWN_MS = 30_000;
@@ -155,7 +156,7 @@ export function EmailLoginForm({
             />
             <p className="text-muted-foreground text-xs">
               Works for accounts that verified this email on their profile. New here? Sign up with
-              your phone number.
+              Google.
             </p>
           </div>
           <Button type="submit" className="w-full" disabled={busy}>

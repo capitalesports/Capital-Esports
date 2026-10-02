@@ -5,6 +5,7 @@ import { LoginForm } from "@/components/auth/login-form";
 import { PageHeader } from "@/components/common/page-header";
 import { getCurrentUser } from "@/server/auth/session";
 import { getSocialLinks } from "@/server/services/content";
+import { phoneLoginEnabled } from "@/lib/phone-login";
 import { safeReturnTo } from "@/lib/validators";
 
 export const metadata: Metadata = { title: "Login", robots: { index: false } };
@@ -21,7 +22,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <PageHeader
           className="pt-0"
           title="Login"
-          description="Browse freely. Log in with Google or your phone to register for matches, see room credentials and join a team."
+          description={`Browse freely. Log in with ${phoneLoginEnabled() ? "Google or your phone" : "Google"} to register for matches, see room credentials and join a team.`}
         />
         <LoginForm returnTo={target} />
         {whatsapp ? (

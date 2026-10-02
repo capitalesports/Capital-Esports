@@ -39,14 +39,20 @@ export async function googleIdTokenFromPopup(): Promise<string> {
       throw new GoogleSignInError("Google sign-in was cancelled.");
     }
     if (code === "auth/popup-blocked") {
-      throw new GoogleSignInError("Your browser blocked the Google window. Allow pop-ups and try again.");
+      throw new GoogleSignInError(
+        "Your browser blocked the Google window. Allow pop-ups and try again.",
+      );
     }
     // Set-up problems (provider off, site domain not authorised): say so, so staff can fix it.
     if (code === "auth/operation-not-allowed" || code === "auth/configuration-not-found") {
-      throw new GoogleSignInError("Google sign-in isn't switched on yet. Please use your mobile number for now.");
+      throw new GoogleSignInError(
+        "Google sign-in isn't switched on yet. Please use your mobile number for now.",
+      );
     }
     if (code === "auth/unauthorized-domain") {
-      throw new GoogleSignInError("Google sign-in isn't set up for this web address yet. Please use your mobile number.");
+      throw new GoogleSignInError(
+        "Google sign-in isn't set up for this web address yet. Please use your mobile number.",
+      );
     }
     console.error("Google sign-in failed", code);
     throw new GoogleSignInError("Google sign-in failed. Please try again.");
