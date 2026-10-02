@@ -477,3 +477,12 @@ New Firebase projects send no SMS at all until a billing account (Blaze plan) is
 - Players who already have a phone keep it, and it is still shown on their profile.
 - Production sets it to `off`. Once billing is linked, remove the variable (or set `on`) and redeploy; nothing else changes.
 - At the owner's request ("remove phone from everywhere"), the switch also hides the whole Phone row on the profile. Wording across the site now speaks of Google and email: the FAQ, privacy text, contact form, the profile's "Logged in as", and the admin user list, user page, audit search and ban text. Phone data and the phone login code stay in place behind the switch, so turning it back on needs no code change.
+
+### M38 Sign up and log in with email and password
+At the owner's request, **Get Started** opens `/signup`: username, email, date of birth and password, with "Continue with Google" and the WhatsApp link below. The login page has email + password first, then Google.
+- **The email must be proven.** Sign-up creates the account and emails a 6-digit code (the same `EmailCode` codes as M12: 10 minutes, 5 tries, one use). The account can't log in until the code is entered. Then the profile is complete (name, date of birth, verified email), so the player lands on the dashboard.
+- **An unproven email doesn't block its owner.** Someone could start a sign-up with another person's email. Until the code is entered, that email can still be taken: a second sign-up replaces the first; "Continue with Google" or verifying the email on a profile clears it from the unfinished account (`releaseUnprovenEmail`).
+- **Password login is open to players.** Any account with a password and a verified email can use it (it was staff only). The answer is the same for an unknown email, an account without a password and a wrong password.
+- **Forgot password:** "Forgot password?" logs in with a code sent to the verified email. There is no "set a new password" screen yet.
+- **No email provider (live site before Resend):** sign-up says to use Google instead, and no account is created.
+- Passwords: scrypt, at least 8 characters, with a show/hide button.

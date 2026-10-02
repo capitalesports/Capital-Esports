@@ -23,7 +23,7 @@ export const EMAIL_RATE_LIMITS = {
   perUser: { limit: 5, windowSeconds: 60 * 60 },
 } as const;
 
-const emailField = z.string().transform((v, ctx) => {
+export const emailField = z.string().transform((v, ctx) => {
   const email = normalizeEmail(v);
   if (!email) {
     ctx.addIssue({ code: "custom", message: "Enter a valid email address" });
@@ -31,7 +31,7 @@ const emailField = z.string().transform((v, ctx) => {
   }
   return email;
 });
-const codeField = z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code");
+export const codeField = z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code");
 
 function hashCode(code: string): string {
   return createHash("sha256").update(`${sessionSecret()}:email-code:${code}`).digest("hex");
@@ -41,7 +41,7 @@ function sameHash(a: string, b: string): boolean {
   return a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-async function sendCode(
+export async function sendCode(
   user: { id: string },
   email: string,
   purpose: "VERIFY" | "LOGIN",
@@ -70,7 +70,7 @@ async function sendCode(
 }
 
 /** Check a code; wrong codes count towards the attempt limit. Returns the matched code row. */
-async function consumeCode(where: Prisma.EmailCodeWhereInput, code: string) {
+export async function consumeCode(where: Prisma.EmailCodeWhereInput, code: string) {
   const row = await db.emailCode.findFirst({
     where: { ...where, usedAt: null },
     orderBy: { createdAt: "desc" },
@@ -92,6 +92,17 @@ async function consumeCode(where: Prisma.EmailCodeWhereInput, code: string) {
   return row;
 }
 
+/**
+ * An email held by an email+password sign-up that never entered its code was never proven, so
+ * whoever does prove it (Google, or verifying it on a profile) takes it over (DECISIONS M38).
+ */
+export async function releaseUnprovenEmail(email: string): Promise<void> {
+  await db.user.updateMany({
+    where: { email, emailVerifiedAt: null, googleId: null, phone: null },
+    data: { email: null },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Verifying an email on the profile
 // ---------------------------------------------------------------------------
@@ -106,8 +117,12 @@ export async function requestEmailVerification(actor: Actor | null, input: unkno
     EMAIL_RATE_LIMITS.perUser.windowSeconds,
     "Too many codes requested. Try again in an hour.",
   );
-  const owner = await db.user.findUnique({ where: { email }, select: { id: true } });
-  if (owner && owner.id !== me.id) {
+  const owner = await db.user.findUnique({
+    where: { email },
+    select: { id: true, emailVerifiedAt: true, googleId: true, phone: true },
+  });
+  const unproven = owner && !owner.emailVerifiedAt && !owner.googleId && !owner.phone;
+  if (owner && owner.id !== me.id && !unproven) {
     throw new AppError("CONFLICT", "That email is already used by another account.", {
       email: ["Already used by another account"],
     });
@@ -121,6 +136,7 @@ export async function confirmEmailVerification(actor: Actor | null, input: unkno
   const me = assertUser(actor);
   const { code } = parseInput(z.object({ code: codeField }), input);
   const row = await consumeCode({ userId: me.id, purpose: "VERIFY" }, code);
+  await releaseUnprovenEmail(row.email);
   const before = await db.user.findUniqueOrThrow({ where: { id: me.id }, select: { email: true } });
   try {
     await db.$transaction(async (tx) => {
@@ -174,8 +190,7 @@ export async function setEmailOptIn(actor: Actor | null, input: unknown) {
 // ---------------------------------------------------------------------------
 
 /**
- * Email a login code. Only accounts with this email verified can log in by email (new accounts sign
- * up with their phone). The answer is the same whether or not the email is known, so it can't be
+ * Email a login code. Only accounts with this email verified can log in by email. The answer is the same whether or not the email is known, so it can't be
  * used to find out who has an account.
  */
 export async function requestEmailLogin(input: unknown, ip: string) {

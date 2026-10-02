@@ -57,7 +57,7 @@ export default async function HomePage() {
       <HomeHero
         stats={resolveHeroStats(settings, live)}
         todayByGame={todayByGame}
-        getStartedHref={user ? "/dashboard" : "/login?returnTo=%2Fdashboard"}
+        getStartedHref={user ? "/dashboard" : "/signup?returnTo=%2Fdashboard"}
         trailerUrl={settings.trailerUrl}
         taglines={taglines}
       />

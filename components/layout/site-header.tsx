@@ -88,7 +88,7 @@ export function SiteHeader({
                 <Link href="/login">Login</Link>
               </Button>
               <Button asChild variant="gold-outline">
-                <Link href="/login?returnTo=%2Fdashboard">Get Started</Link>
+                <Link href="/signup?returnTo=%2Fdashboard">Get Started</Link>
               </Button>
             </>
           )}

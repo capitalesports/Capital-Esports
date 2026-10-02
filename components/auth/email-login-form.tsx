@@ -6,34 +6,20 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { normalizeEmail, safeReturnTo } from "@/lib/input-rules";
-import { phoneLoginEnabled } from "@/lib/phone-login";
+import { normalizeEmail } from "@/lib/input-rules";
+import { afterLogin, postJson } from "./auth-post";
 import { otpMode } from "./otp-client";
 import { useCountdown } from "./use-countdown";
 
 const RESEND_COOLDOWN_MS = 30_000;
 
-async function post(url: string, body: unknown) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => ({}))) as {
-    ok?: boolean;
-    error?: string;
-    needsProfile?: boolean;
-  };
-  return { ok: res.ok && !!json.ok, ...json };
-}
-
-/** Log in with a code sent to the account's verified email (accounts are created with a phone). */
+/** Log in with a code sent to the account's verified email (also the "forgot password" route). */
 export function EmailLoginForm({
   returnTo,
-  onUsePhone,
+  onBack,
 }: {
   returnTo: string | null;
-  onUsePhone: () => void;
+  onBack: () => void;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -43,29 +29,6 @@ export function EmailLoginForm({
   const [busy, setBusy] = useState(false);
   const [resendAt, setResendAt] = useState<number | null>(null);
   const cooldown = useCountdown(resendAt);
-  // Staff (admins, moderators) can log in with their email and password (DECISIONS M18).
-  const [withPassword, setWithPassword] = useState(false);
-  const [password, setPassword] = useState("");
-
-  async function passwordLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    const normalized = normalizeEmail(email);
-    if (!normalized) return setError("Enter a valid email address.");
-    if (!password) return setError("Enter your password.");
-    setBusy(true);
-    try {
-      const r = await post("/api/auth/password", { email: normalized, password });
-      if (!r.ok) return setError(r.error ?? "Login failed. Please try again.");
-      const target = safeReturnTo(returnTo);
-      router.replace(r.needsProfile ? `/profile?returnTo=${encodeURIComponent(target)}` : target);
-      router.refresh();
-    } catch {
-      setError("Login failed. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function sendCode(e?: React.FormEvent) {
     e?.preventDefault();
@@ -74,7 +37,7 @@ export function EmailLoginForm({
     if (!normalized) return setError("Enter a valid email address.");
     setBusy(true);
     try {
-      const r = await post("/api/auth/email/request", { email: normalized });
+      const r = await postJson("/api/auth/email/request", { email: normalized });
       if (!r.ok) return setError(r.error ?? "Could not send the code. Please try again.");
       setSentTo(normalized);
       setResendAt(Date.now() + RESEND_COOLDOWN_MS);
@@ -91,11 +54,9 @@ export function EmailLoginForm({
     if (!/^\d{6}$/.test(code)) return setError("Enter the 6-digit code.");
     setBusy(true);
     try {
-      const r = await post("/api/auth/email/verify", { email: sentTo, code });
+      const r = await postJson("/api/auth/email/verify", { email: sentTo, code });
       if (!r.ok) return setError(r.error ?? "Login failed. Please try again.");
-      const target = safeReturnTo(returnTo);
-      router.replace(r.needsProfile ? `/profile?returnTo=${encodeURIComponent(target)}` : target);
-      router.refresh();
+      afterLogin(router, returnTo, r.needsProfile);
     } catch {
       setError("Login failed. Please try again.");
     } finally {
@@ -111,37 +72,7 @@ export function EmailLoginForm({
         </Alert>
       ) : null}
 
-      {withPassword ? (
-        <form onSubmit={passwordLogin} className="space-y-4" noValidate>
-          <div className="space-y-2">
-            <Label htmlFor="login-email">Email</Label>
-            <Input
-              id="login-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              placeholder="you@example.com"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="login-password">Password</Label>
-            <Input
-              id="login-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-            <p className="text-muted-foreground text-xs">For admins and moderators.</p>
-          </div>
-          <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? "Logging in…" : "Log in"}
-          </Button>
-        </form>
-      ) : !sentTo ? (
+      {!sentTo ? (
         <form onSubmit={sendCode} className="space-y-4" noValidate>
           <div className="space-y-2">
             <Label htmlFor="login-email">Email</Label>
@@ -155,8 +86,8 @@ export function EmailLoginForm({
               required
             />
             <p className="text-muted-foreground text-xs">
-              Works for accounts that verified this email on their profile. New here? Sign up with
-              Google.
+              Forgot your password? We&apos;ll email you a code to log in. Works for accounts with a
+              verified email.
             </p>
           </div>
           <Button type="submit" className="w-full" disabled={busy}>
@@ -205,24 +136,10 @@ export function EmailLoginForm({
         </form>
       )}
 
-      <Button
-        type="button"
-        variant="ghost"
-        className="mt-4 w-full"
-        onClick={() => {
-          setWithPassword((v) => !v);
-          setSentTo(null);
-          setCode("");
-          setPassword("");
-          setError(null);
-        }}
-      >
-        {withPassword ? "Email me a code instead" : "Staff? Log in with password"}
+      <Button type="button" variant="outline" className="mt-4 w-full" onClick={onBack}>
+        Back to login
       </Button>
-      <Button type="button" variant="outline" className="mt-2 w-full" onClick={onUsePhone}>
-        {phoneLoginEnabled() ? "Use phone number instead" : "Back to Google login"}
-      </Button>
-      {otpMode() === "stub" && !withPassword ? (
+      {otpMode() === "stub" ? (
         <p className="border-border text-muted-foreground mt-6 rounded-md border border-dashed p-3 text-xs">
           Development mode: without an email provider the code is printed in the server console.
         </p>

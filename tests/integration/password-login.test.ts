@@ -15,7 +15,7 @@ beforeEach(async () => {
   await resetDb();
 });
 
-describe("staff email + password login", () => {
+describe("email + password login", () => {
   it("logs in an admin or moderator with the right password (email in any case)", async () => {
     const admin = await staff("ADMIN", "boss@example.com");
     expect(await loginWithPassword({ email: " Boss@Example.com ", password: PASSWORD }, "1.1.1.1")).toMatchObject({
@@ -25,13 +25,18 @@ describe("staff email + password login", () => {
     expect((await loginWithPassword({ email: "mod@example.com", password: PASSWORD }, "1.1.1.1")).id).toBe(mod.id);
   });
 
-  it("gives the same answer for a wrong password, an unknown email and a player", async () => {
+  it("logs in a player who has a password (DECISIONS M38)", async () => {
+    const player = await staff("PLAYER", "player@example.com");
+    expect((await loginWithPassword({ email: "player@example.com", password: PASSWORD }, "1.1.1.2")).id).toBe(player.id);
+  });
+
+  it("gives the same answer for a wrong password, an unknown email and an account without a password", async () => {
     await staff("ADMIN", "boss@example.com");
-    await staff("PLAYER", "player@example.com");
+    await createUser({ email: "nopass@example.com" });
     for (const input of [
       { email: "boss@example.com", password: "wrong-password" },
       { email: "nobody@example.com", password: PASSWORD },
-      { email: "player@example.com", password: PASSWORD },
+      { email: "nopass@example.com", password: PASSWORD },
     ]) {
       await expect(loginWithPassword(input, "2.2.2.2")).rejects.toMatchObject({
         code: "VALIDATION",

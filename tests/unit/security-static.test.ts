@@ -69,7 +69,11 @@ const ROUTE_MUTATIONS: Record<string, string> = {
   "app/api/auth/google/route.ts":
     "Google ID token verified server-side (Firebase Admin; stub only off-production), same-origin check, IP rate limit, ban checks; new players only get a signed 30-min signup cookie",
   "app/api/auth/password/route.ts":
-    "staff only, scrypt hashes, same answer for unknown email/player/wrong password, same-origin check, rate limits per IP and email, ban checks",
+    "scrypt hashes, verified email required, same answer for unknown email/no password/wrong password, same-origin check, rate limits per IP and email, ban checks",
+  "app/api/auth/signup/route.ts":
+    "same-origin check, Zod validation, rate limits per IP and email, ban check, account can't log in until the emailed code is entered",
+  "app/api/auth/signup/verify/route.ts":
+    "hashed one-time code (10 min, 5 tries, single use) proves the email, same-origin check, IP rate limit, ban checks",
   "app/api/auth/logout/route.ts": "same-origin check; only clears the caller's cookie",
   "app/api/webhooks/cashfree/route.ts": "HMAC signature mandatory",
   "app/api/webhooks/cashfree-payouts/route.ts": "HMAC signature mandatory",

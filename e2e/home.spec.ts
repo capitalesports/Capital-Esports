@@ -78,7 +78,7 @@ test.describe("home page (desktop, home-desktop.png)", () => {
     await expect(header.getByRole("link", { name: "Login" })).toBeVisible();
     await expect(header.getByRole("link", { name: "Get Started" })).toHaveAttribute(
       "href",
-      /^\/login/,
+      /^\/signup/,
     );
     await nav.getByRole("button", { name: "Games" }).click();
     for (const [name, slug] of [
@@ -120,7 +120,7 @@ test.describe("home page (desktop, home-desktop.png)", () => {
     }
     await expect(hero.getByRole("link", { name: "Get Started" })).toHaveAttribute(
       "href",
-      "/login?returnTo=%2Fdashboard",
+      "/signup?returnTo=%2Fdashboard",
     );
     for (const [slug, copy] of [
       ["free-fire", /^Free Fire: Squad up, Survive & dominate\./],

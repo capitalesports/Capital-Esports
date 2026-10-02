@@ -5,6 +5,7 @@ import type { GoogleProfile } from "@/server/auth/google-verifier";
 import { isProfileComplete } from "@/lib/profile";
 import { displayNameSchema } from "@/lib/validators";
 import { assertAccountCanLogIn, assertPhoneNotBanned } from "./auth";
+import { releaseUnprovenEmail } from "./email";
 
 export interface GoogleLoginOutcome {
   id: string;
@@ -19,6 +20,7 @@ export interface GoogleLoginOutcome {
  * A banned email can't sign in or sign up again.
  */
 export async function loginWithGoogle(profile: GoogleProfile): Promise<GoogleLoginOutcome> {
+  await releaseUnprovenEmail(profile.email);
   const user =
     (await db.user.findUnique({
       where: { googleId: profile.sub },

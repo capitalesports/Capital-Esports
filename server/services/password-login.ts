@@ -7,7 +7,6 @@ import { parseInput } from "@/server/validation";
 import { normalizeEmail } from "@/lib/input-rules";
 import { hashPassword, PASSWORD_RULES, verifyPassword } from "@/lib/password-hash";
 import { isProfileComplete } from "@/lib/profile";
-import { isStaff } from "@/lib/roles";
 import { assertAccountCanLogIn, assertPhoneNotBanned } from "./auth";
 
 export const PASSWORD_RATE_LIMITS = {
@@ -27,8 +26,9 @@ const WRONG = () =>
   new AppError("VALIDATION", "Wrong email or password.", { password: ["Wrong email or password"] });
 
 /**
- * Staff login with email + password (DECISIONS M18). Only admin/moderator accounts with a password
- * set can use it; the answer is the same for an unknown email, a player account or a wrong password.
+ * Email + password login (staff: DECISIONS M18; players who signed up with a password: M38). Only
+ * accounts with a password and a verified email can use it; the answer is the same for an unknown
+ * email, an account without a password and a wrong password.
  */
 export async function loginWithPassword(
   input: unknown,
@@ -45,12 +45,12 @@ export async function loginWithPassword(
     where: { email },
     include: { gameProfiles: { select: { game: true } } },
   });
-  const stored = user?.passwordHash && isStaff(user) && user.emailVerifiedAt ? user.passwordHash : null;
+  const stored = user?.passwordHash && user.emailVerifiedAt ? user.passwordHash : null;
   decoy ??= hashPassword("decoy-password-never-matches");
   const ok = await verifyPassword(password, stored ?? (await decoy));
   if (!user || !stored || !ok) throw WRONG();
 
-  await assertPhoneNotBanned(user.phone);
+  await assertPhoneNotBanned(user.phone, user.email);
   assertAccountCanLogIn(user);
   return { id: user.id, profileComplete: isProfileComplete(user) };
 }
