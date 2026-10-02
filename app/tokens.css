@@ -1,0 +1,75 @@
+/*
+ * Design tokens — exactly the values in docs/PHASES.md "Design reference".
+ * Do not add colours here: every UI colour must map to one of these tokens.
+ * Consumed through Tailwind utilities generated in globals.css (@theme inline),
+ * e.g. bg-background, bg-card, border-border, text-gold, text-muted-foreground, bg-game-bgmi.
+ */
+
+:root {
+  /* palette (Design reference) */
+  --ds-background: #0b0b0d;
+  --ds-surface: #14141a;
+  --ds-border: #26262e;
+  --ds-gold: #e8b33a;
+  --ds-gold-hover: #f2c75c;
+  --ds-text: #f5f5f5;
+  --ds-text-secondary: #a0a0a8;
+  --ds-free-fire: #f28a1e;
+  --ds-bgmi: #2fbf8f;
+  --ds-valorant: #e8394b;
+  --ds-success: #22c55e;
+  --ds-error: #ef4444;
+
+  /* layout */
+  --page-gutter: 1rem; /* 16px mobile side gutter */
+  --page-max-width: 82rem;
+  --header-height: 4rem;
+  --tap-min: 2.75rem; /* 44px minimum tap target */
+  --radius: 0.75rem; /* 12px card radius */
+
+  /* shadcn/ui semantic variables, mapped onto the palette */
+  --background: var(--ds-background);
+  --foreground: var(--ds-text);
+  --card: var(--ds-surface);
+  --card-foreground: var(--ds-text);
+  --popover: var(--ds-surface);
+  --popover-foreground: var(--ds-text);
+  --primary: var(--ds-gold);
+  --primary-foreground: var(--ds-background);
+  --secondary: var(--ds-surface);
+  --secondary-foreground: var(--ds-text);
+  --muted: var(--ds-surface);
+  --muted-foreground: var(--ds-text-secondary);
+  --accent: var(--ds-surface);
+  --accent-foreground: var(--ds-text);
+  --destructive: var(--ds-error);
+  --border: var(--ds-border);
+  --input: var(--ds-border);
+  --ring: var(--ds-gold);
+  --chart-1: var(--ds-gold);
+  --chart-2: var(--ds-free-fire);
+  --chart-3: var(--ds-bgmi);
+  --chart-4: var(--ds-valorant);
+  --chart-5: var(--ds-success);
+  --sidebar: var(--ds-surface);
+  --sidebar-foreground: var(--ds-text);
+  --sidebar-primary: var(--ds-gold);
+  --sidebar-primary-foreground: var(--ds-background);
+  --sidebar-accent: var(--ds-surface);
+  --sidebar-accent-foreground: var(--ds-text);
+  --sidebar-border: var(--ds-border);
+  --sidebar-ring: var(--ds-gold);
+
+  /* per-game accents (only on that game's cards and pages) */
+  --game-free-fire: var(--ds-free-fire);
+  --game-bgmi: var(--ds-bgmi);
+  --game-valorant: var(--ds-valorant);
+  --game-accent-foreground: var(--ds-background);
+
+  /* status */
+  --success: var(--ds-success);
+  --warning: var(--ds-gold);
+  --info: var(--ds-text-secondary);
+
+  color-scheme: dark;
+}

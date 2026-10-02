@@ -1,0 +1,10 @@
+node_modules
+.next
+coverage
+generated
+playwright-report
+test-results
+package-lock.json
+prisma/migrations
+docs/SPEC.md
+docs/PHASES.md

@@ -1,0 +1,795 @@
+// Esports platform schema. All DateTime columns are UTC; money is integer paise.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  PLAYER
+  MODERATOR
+  ADMIN
+}
+
+enum Game {
+  FREE_FIRE
+  BGMI
+  VALORANT
+}
+
+enum TeamMemberStatus {
+  INVITED
+  CONFIRMED
+}
+
+enum MatchKind {
+  SCRIM
+  TOURNAMENT
+}
+
+enum MatchMode {
+  SOLO
+  DUO
+  SQUAD
+  ONE_V_ONE
+  TWO_V_TWO
+  FOUR_V_FOUR
+  FIVE_V_FIVE
+}
+
+enum MatchStatus {
+  UPCOMING
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  LIVE
+  RESULTS_PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum RegistrationStatus {
+  PENDING
+  PENDING_PAYMENT
+  CONFIRMED
+  WAITLISTED
+  CANCELLED
+  NO_SHOW
+}
+
+enum RosterStatus {
+  INVITED
+  CONFIRMED
+  DECLINED
+}
+
+enum TournamentFormat {
+  BRACKET
+  LOBBY_POINTS
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
+// ---------------------------------------------------------------------------
+// Users and identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id                       String    @id @default(cuid())
+  /// Verified mobile number. Optional: Google sign-ups may have none (DECISIONS M31).
+  phone                    String?   @unique
+  displayName              String?
+  dateOfBirth              DateTime? @db.Date
+  avatarUrl                String?
+  role                     Role      @default(PLAYER)
+  strikes                  Int       @default(0)
+  /// Account ban (cannot log in). bannedAt set + bannedUntil null = permanent.
+  bannedAt                 DateTime?
+  bannedUntil              DateTime?
+  banReason                String?
+  /// Strike block: can log in but cannot register (3 strikes in a season = 7 days).
+  registrationBlockedUntil DateTime?
+  /// Soft delete (duplicate account merged into another).
+  deletedAt                DateTime?
+  mergedIntoId             String?
+  /// Web push opt-in (in-app inbox is always on).
+  pushOptIn                Boolean   @default(false)
+  /// Verified email (lower-cased). Set only after the player enters the code we emailed.
+  email                    String?   @unique
+  emailVerifiedAt          DateTime?
+  /// Staff only: scrypt hash for email + password login (lib/password-hash.ts). Players have none.
+  passwordHash             String?
+  /// Google account (Firebase "google.com" identity) linked for "Continue with Google" (DECISIONS M29).
+  googleId                 String?   @unique
+  /// Email copies of important notifications (only sent to a verified email).
+  emailOptIn               Boolean   @default(true)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  gameProfiles      GameProfile[]
+  captainOf         Team[]                @relation("TeamCaptain")
+  teamMemberships   TeamMember[]
+  registrations     Registration[]
+  rosterEntries     RegistrationMember[]
+  pointsEntries     PointsEntry[]
+  createdMatches    Match[]               @relation("MatchCreatedBy")
+  submittedResults  Result[]              @relation("ResultSubmittedBy")
+  approvedResults   Result[]              @relation("ResultApprovedBy")
+  bansCreated       Ban[]                 @relation("BanCreatedBy")
+  auditLogs         AuditLog[]
+  payments          Payment[]
+  payouts           Payout[]
+  payoutMethod      PayoutMethod?
+  notifications     Notification[]
+  pushSubscriptions PushSubscription[]
+  emailCodes        EmailCode[]
+  leaderboardRows   LeaderboardSnapshot[]
+  seasonResults     SeasonResult[]
+  reportsFiled      Report[]              @relation("ReportReporter")
+  reportsAgainst    Report[]              @relation("ReportTarget")
+
+  @@index([displayName])
+}
+
+model GameProfile {
+  id        String   @id @default(cuid())
+  userId    String
+  game      Game
+  /// Canonical ID: Free Fire UID, BGMI character ID, or lower-cased Riot ID "name#tag".
+  gameId    String
+  /// BGMI in-game name, or the Riot ID as typed (display form) for Valorant.
+  ign       String?
+  /// Valorant region (e.g. AP).
+  region    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([game, gameId])
+  @@unique([userId, game])
+}
+
+model Ban {
+  id          String    @id @default(cuid())
+  /// Exactly one of phone, email or (game + gameId) is set.
+  phone       String?
+  /// A banned account's email, so it can't come back through "Continue with Google" (DECISIONS M31).
+  email       String?
+  game        Game?
+  gameId      String?
+  reason      String
+  expiresAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  liftedAt    DateTime?
+
+  createdBy User? @relation("BanCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([phone])
+  @@index([email])
+  @@index([game, gameId])
+}
+
+// ---------------------------------------------------------------------------
+// Teams
+// ---------------------------------------------------------------------------
+
+model Team {
+  id        String   @id @default(cuid())
+  game      Game
+  name      String
+  /// 5 capital letters players type into "Join team" (lib/team-code.ts). Unique across all teams.
+  joinCode  String   @unique @default(dbgenerated("random_team_code()"))
+  captainId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  captain       User           @relation("TeamCaptain", fields: [captainId], references: [id])
+  members       TeamMember[]
+  registrations Registration[]
+  results       Result[]
+
+  @@unique([game, name])
+}
+
+model TeamMember {
+  id          String           @id @default(cuid())
+  teamId      String
+  userId      String
+  /// Denormalised from Team so "one confirmed team per game" can be checked cheaply.
+  game        Game
+  status      TeamMemberStatus @default(INVITED)
+  invitedAt   DateTime         @default(now())
+  confirmedAt DateTime?
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId, game])
+}
+
+// ---------------------------------------------------------------------------
+// Matches and registrations
+// ---------------------------------------------------------------------------
+
+model Match {
+  id                   String      @id @default(cuid())
+  game                 Game
+  kind                 MatchKind   @default(SCRIM)
+  mode                 MatchMode
+  title                String
+  description          String?
+  startsAt             DateTime
+  /// When the cron job moves UPCOMING -> REGISTRATION_OPEN (null = admin opens manually).
+  registrationOpensAt  DateTime?
+  registrationClosesAt DateTime
+  maxSlots             Int
+  /// Fewer confirmed entries than this when registration closes = the match is cancelled (and refunded).
+  minSlots             Int         @default(2)
+  entryFeePaise        Int         @default(0)
+  prizePaise           Int         @default(0)
+  status               MatchStatus @default(UPCOMING)
+  roomId               String?
+  roomPassword         String?
+  streamUrl            String?
+  cancelReason         String?
+  /// Set when results are approved; the 2-hour dispute window starts here.
+  resultsApprovedAt    DateTime?
+  /// Tournament sign-up list: teams register here; it is never played (Phase 5).
+  isEntryList          Boolean     @default(false)
+  /// Open-entry scrims split into lobbies when registration closes: extra lobbies point at the
+  /// original listing (which becomes lobby 1). Null lobbyNumber = never split.
+  parentMatchId        String?
+  lobbyNumber          Int?
+  /// Valorant bracket position: round 1 = first round; index within the round.
+  bracketRound         Int?
+  bracketIndex         Int?
+  /// Set once the 30-minute reminder / room-credentials notice went out (reminder job dedupe).
+  reminderSentAt       DateTime?
+  roomNoticeSentAt     DateTime?
+  tournamentId         String?
+  createdById          String
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  tournament    Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  entryFor      Tournament?          @relation("TournamentEntryList")
+  parent        Match?               @relation("MatchLobbies", fields: [parentMatchId], references: [id], onDelete: SetNull)
+  lobbies       Match[]              @relation("MatchLobbies")
+  createdBy     User                 @relation("MatchCreatedBy", fields: [createdById], references: [id])
+  registrations Registration[]
+  rosterEntries RegistrationMember[]
+  results       Result[]
+  pointsEntries PointsEntry[]
+  payments      Payment[]
+  reports       Report[]
+
+  @@index([startsAt, status])
+  @@index([game, startsAt])
+  @@index([tournamentId])
+  @@index([parentMatchId])
+}
+
+model Registration {
+  id          String             @id @default(cuid())
+  matchId     String
+  /// The registrant: the player (solo/duo) or the team captain (squad/5v5).
+  userId      String
+  teamId      String?
+  /// Team name the captain typed when entering the roster by game ID (no Team record needed).
+  teamName    String?
+  status      RegistrationStatus
+  paymentId   String?
+  /// Order of arrival; waitlist promotion takes the lowest position first.
+  position    Int
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  cancelledAt DateTime?
+
+  match   Match                @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user    User                 @relation(fields: [userId], references: [id])
+  team    Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  members RegistrationMember[]
+  results Result[]
+
+  @@unique([matchId, userId])
+  @@index([matchId, status])
+}
+
+/// Per-match roster for team registrations. The captain enters every player by game ID and exact
+/// in-game name (DECISIONS M13); `userId` links a player who has an account with that game ID (so
+/// they get points and see the room), and is null otherwise. Older rosters (team members confirming
+/// per match) have a userId and no gameId.
+model RegistrationMember {
+  id             String       @id @default(cuid())
+  registrationId String
+  matchId        String
+  userId         String?
+  /// Canonical game ID (Free Fire UID, BGMI ID, lower-cased Riot ID) and the exact in-game name.
+  gameId         String?
+  ign            String?
+  status         RosterStatus @default(INVITED)
+  respondedAt    DateTime?
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  match        Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([registrationId])
+  @@index([matchId, gameId])
+}
+
+model Result {
+  id             String    @id @default(cuid())
+  matchId        String
+  registrationId String
+  teamId         String?
+  userId         String?
+  placement      Int?
+  kills          Int?
+  /// Valorant: did this side win, and the round difference (tiebreaker).
+  won            Boolean?
+  roundDiff      Int?
+  screenshotUrl  String?
+  trackerUrl     String?
+  submittedById  String?
+  submittedAt    DateTime  @default(now())
+  approvedById   String?
+  approvedAt     DateTime?
+
+  match        Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  submittedBy  User?        @relation("ResultSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  approvedBy   User?        @relation("ResultApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([matchId, registrationId])
+}
+
+// ---------------------------------------------------------------------------
+// Seasons, points, tournaments
+// ---------------------------------------------------------------------------
+
+model Season {
+  id        String   @id @default(cuid())
+  game      Game
+  name      String
+  startsAt  DateTime
+  endsAt    DateTime
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  pointsEntries PointsEntry[]
+  leaderboard   LeaderboardSnapshot[]
+  results       SeasonResult[]
+
+  @@index([game, isActive])
+}
+
+model PointsEntry {
+  id        String   @id @default(cuid())
+  seasonId  String
+  userId    String
+  matchId   String
+  points    Int
+  reason    String
+  placement Int?
+  kills     Int      @default(0)
+  won       Boolean  @default(false)
+  roundDiff Int      @default(0)
+  createdAt DateTime @default(now())
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([seasonId, userId])
+}
+
+model Tournament {
+  id                 String           @id @default(cuid())
+  game               Game
+  /// Monday (IST) of the tournament week, stored as a date.
+  weekOf             DateTime         @db.Date
+  title              String
+  prizePoolPaise     Int              @default(0)
+  rulesMarkdown      String           @default("")
+  format             TournamentFormat
+  /// Mode of every match in the tournament. Head-to-head modes (1v1…5v5) use a bracket.
+  mode               MatchMode
+  /// First match start (UTC).
+  startsAt           DateTime
+  /// BRACKET only: 8 or 16 teams.
+  bracketSize        Int?
+  streamUrl          String?
+  /// The sign-up list match (isEntryList) teams register for.
+  entryMatchId       String?          @unique
+  /// Published winners: [{ place, name, avatarUrl, prizePaise, userIds }]
+  winners            Json?
+  winnersPublishedAt DateTime?
+  /// Cancelled by an admin (every open match cancelled and refunded).
+  cancelledAt        DateTime?
+  cancelReason       String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  matches   Match[]
+  entryList Match?  @relation("TournamentEntryList", fields: [entryMatchId], references: [id], onDelete: SetNull)
+
+  @@unique([game, mode, weekOf])
+}
+
+// ---------------------------------------------------------------------------
+// Money (completed in Phase 6)
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id             String        @id @default(cuid())
+  userId         String
+  matchId        String
+  registrationId String        @unique
+  /// Cashfree order_id
+  orderId        String        @unique
+  amountPaise    Int
+  currency       String        @default("INR")
+  status         PaymentStatus @default(CREATED)
+  cfPaymentId    String?
+  /// Cashfree payment_session_id for the current order (opens checkout)
+  sessionId      String?
+  /// Last verified webhook body (never sent to clients)
+  rawWebhook     Json?
+  expiresAt      DateTime
+  paidAt         DateTime?
+  refundId       String?       @unique
+  refundReason   String?
+  refundedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id])
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@index([status, expiresAt])
+}
+
+enum PayoutMethodKind {
+  UPI
+  BANK
+}
+
+model Payout {
+  id                 String            @id @default(cuid())
+  userId             String
+  tournamentId       String?
+  seasonId           String?
+  /// Scrim prize (match.prizePaise) for the winner of a non-tournament match.
+  matchId            String?
+  place              Int
+  amountPaise        Int
+  method             PayoutMethodKind?
+  beneficiaryId      String?
+  /// Our transfer_id sent to Cashfree (set when the transfer is requested)
+  transferId         String?           @unique
+  cfTransferId       String?
+  status             PayoutStatus      @default(PENDING)
+  rawResponse        Json?
+  approvedById       String?
+  approvedAt         DateTime?
+  secondApprovedById String?
+  failureReason      String?
+  /// Paid outside Cashfree (UPI/bank transfer by hand): the reference the admin recorded.
+  manualReference    String?
+  voidedAt           DateTime?
+  voidReason         String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, tournamentId])
+  @@unique([userId, seasonId])
+  @@unique([userId, matchId])
+  @@index([status])
+}
+
+/// Where a player receives prizes. Only masked details are stored; full details live at Cashfree.
+model PayoutMethod {
+  id                String           @id @default(cuid())
+  userId            String           @unique
+  kind              PayoutMethodKind
+  beneficiaryId     String           @unique
+  accountHolderName String
+  /// The full UPI ID: shown to its owner (profile "show" toggle) and, per audited reveal, to an admin
+  /// paying an unpaid prize by hand (DECISIONS M32). Never in audit logs or lists.
+  vpa               String?
+  vpaMasked         String?
+  accountLast4      String?
+  ifsc              String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Every verified webhook we processed, keyed for replay protection.
+model WebhookEvent {
+  id        String   @id @default(cuid())
+  source    String
+  eventKey  String   @unique
+  type      String
+  createdAt DateTime @default(now())
+}
+
+/// Differences found by the nightly reconciliation job.
+model ReconciliationFlag {
+  id         String    @id @default(cuid())
+  kind       String
+  entityId   String
+  ours       String
+  theirs     String
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@index([resolvedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+/// Fixed-window counters for rate limiting (works across serverless instances).
+model RateLimit {
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+}
+
+// ---------------------------------------------------------------------------
+// Admin-editable content (Phase 2)
+// ---------------------------------------------------------------------------
+
+/// Markdown pages/blocks keyed by slug: rules.FREE_FIRE, rules.BGMI, rules.VALORANT, faq, terms, privacy, refund-policy, how-it-works.
+model SiteContent {
+  key         String   @id
+  body        String   @default("")
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
+model Sponsor {
+  id        String   @id @default(cuid())
+  name      String
+  logoUrl   String
+  url       String?
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model SocialLink {
+  /// WHATSAPP | DISCORD | INSTAGRAM | FACEBOOK | YOUTUBE
+  platform  String   @id
+  url       String
+  updatedAt DateTime @updatedAt
+}
+
+model CarouselItem {
+  id           String   @id @default(cuid())
+  game         Game?
+  title        String
+  subtitle     String?
+  imageUrl     String?
+  linkUrl      String?
+  order        Int      @default(0)
+  active       Boolean  @default(true)
+  /// Set when generated from published tournament winners (Phase 5).
+  tournamentId String?
+  createdAt    DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Points, leaderboards, reports (Phase 4)
+// ---------------------------------------------------------------------------
+
+model PointsConfig {
+  game                 Game     @id
+  /// Points by placement: index 0 = 1st place. Placements beyond the table score 0.
+  placementPoints      Json
+  killPoints           Int      @default(1)
+  winPoints            Int      @default(3)
+  lossPoints           Int      @default(0)
+  tournamentMultiplier Int      @default(2)
+  updatedAt            DateTime @updatedAt
+}
+
+/// Cached standings for a season, rebuilt whenever results are approved or reopened.
+model LeaderboardSnapshot {
+  seasonId     String
+  userId       String
+  rank         Int
+  points       Int
+  matches      Int
+  wins         Int
+  kills        Int
+  roundDiff    Int
+  /// When the player last scored (tiebreaker "earlier achievement").
+  lastScoredAt DateTime
+  updatedAt    DateTime @default(now())
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([seasonId, userId])
+  @@index([seasonId, rank])
+}
+
+/// Final top 3 of an archived season (champions).
+model SeasonResult {
+  id       String @id @default(cuid())
+  seasonId String
+  userId   String
+  rank     Int
+  points   Int
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, rank])
+}
+
+enum ReportType {
+  PLAYER
+  RESULT
+  DISPUTE
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  type         ReportType
+  reporterId   String
+  targetUserId String?
+  matchId      String?
+  reason       String
+  evidenceUrl  String?
+  status       ReportStatus @default(OPEN)
+  resolution   String?
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+
+  reporter   User   @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetUser User?  @relation("ReportTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  match      Match? @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  contact   String
+  message   String
+  userId    String?
+  handled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([handled, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications, push, analytics (Phase 7)
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  url       String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+enum EmailCodePurpose {
+  VERIFY
+  LOGIN
+}
+
+/// One-time 6-digit codes sent by email (verify an address, or log in). Only a hash is stored.
+model EmailCode {
+  id        String           @id @default(cuid())
+  userId    String
+  email     String
+  purpose   EmailCodePurpose
+  codeHash  String
+  attempts  Int              @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, purpose, createdAt])
+  @@index([userId, purpose, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// First-party analytics: page views (path only) and funnel steps. No IPs, no cookies.
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  name      String
+  path      String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@unique([name, userId])
+  @@index([name, createdAt])
+}
