@@ -6,7 +6,7 @@ import { AppError } from "@/server/errors";
 
 /** Object storage for avatars and result screenshots. */
 export interface StorageProvider {
-  readonly kind: "supabase" | "local";
+  readonly kind: "supabase" | "vercel-blob" | "local";
   /** Store bytes under `key` and return a URL that can be rendered in <img>. */
   put(key: string, bytes: Uint8Array, contentType: string): Promise<string>;
 }
@@ -29,6 +29,32 @@ class SupabaseStorage implements StorageProvider {
     });
     if (!res.ok) throw new AppError("UNAVAILABLE", "Upload failed. Please try again.");
     return `${url}/storage/v1/object/public/${bucket}/${key}`;
+  }
+}
+
+/**
+ * Vercel Blob (DECISIONS M35): storage that lives in the same Vercel account as the site.
+ * `BLOB_READ_WRITE_TOKEN` is set by Vercel when a Blob store is connected to the project.
+ */
+class VercelBlobStorage implements StorageProvider {
+  readonly kind = "vercel-blob" as const;
+  constructor(private token: string) {}
+
+  async put(key: string, bytes: Uint8Array, contentType: string): Promise<string> {
+    const { put } = await import("@vercel/blob");
+    try {
+      const blob = await put(key, Buffer.from(bytes), {
+        access: "public",
+        token: this.token,
+        contentType,
+        addRandomSuffix: false,
+        allowOverwrite: true,
+        cacheControlMaxAge: 31536000,
+      });
+      return blob.url;
+    } catch {
+      throw new AppError("UNAVAILABLE", "Upload failed. Please try again.");
+    }
   }
 }
 
@@ -72,6 +98,8 @@ export async function readLocalFile(
 export function getStorage(): StorageProvider {
   const cfg = supabaseStorageConfig();
   if (cfg) return new SupabaseStorage(cfg);
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+  if (blobToken) return new VercelBlobStorage(blobToken);
   if (isProductionDeployment())
     throw new AppError("UNAVAILABLE", "File uploads are not configured.");
   return new LocalDiskStorage();
