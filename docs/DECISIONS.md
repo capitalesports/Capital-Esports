@@ -486,3 +486,12 @@ At the owner's request, **Get Started** opens `/signup`: username, email, date o
 - **Forgot password:** "Forgot password?" logs in with a code sent to the verified email. There is no "set a new password" screen yet.
 - **No email provider (live site before Resend):** sign-up says to use Google instead, and no account is created.
 - Passwords: scrypt, at least 8 characters, with a show/hide button.
+
+### M39 Account deletion needs an admin's approval
+At the owner's request, players can no longer delete their account themselves.
+- **Player:** the profile's "Delete account" section has **Request account deletion**, with an optional reason. While the request is pending, the account works as usual and the player can withdraw it. Only one request can be pending at a time.
+- **Admin:** **Admin → Deletion requests** (admins only), plus a dashboard card with the pending count.
+  - **Approve and delete** erases the account (`eraseAccount`, the old self-deletion with the same checks). Captains, payouts in flight and matches that can't be cancelled still block it, and the request stays pending.
+  - **Decline** keeps the account and sends the player a notification with the admin's optional note.
+  - Every step is audited (`user.deletionRequest.*`, `user.deleteAccount` with the admin as actor).
+- **Erasing now also clears the Google link and the password,** like the email (M7 keeps only the phone). Before, a deleted Google account blocked that Google login forever. A migration clears both on accounts that were already deleted.

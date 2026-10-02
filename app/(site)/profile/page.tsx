@@ -5,17 +5,19 @@ import { Artwork } from "@/components/common/artwork";
 import { PageHeader } from "@/components/common/page-header";
 import { AvatarForm } from "@/components/profile/avatar-form";
 import { ContactDetails } from "@/components/profile/contact-details";
-import { DeleteAccountDialog } from "@/components/profile/delete-account-dialog";
+import { DeletionRequestPanel } from "@/components/profile/deletion-request-panel";
 import { PayoutMethodForm } from "@/components/profile/payout-method-form";
 import { ProfileDetailsForm } from "@/components/profile/profile-details-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { requirePageUser } from "@/server/auth/guards";
 import { db } from "@/server/db";
+import { getMyPendingDeletionRequest } from "@/server/services/account-deletion";
 import { MINOR_PAYOUT_MESSAGE } from "@/server/services/payouts";
 import { maskEmail, maskPhone } from "@/lib/contact-display";
 import { isAdult } from "@/lib/payments";
 import { isProfileComplete } from "@/lib/profile";
+import { formatIST } from "@/lib/time";
 import { safeReturnTo } from "@/lib/validators";
 
 export const metadata: Metadata = { title: "Profile", robots: { index: false } };
@@ -27,6 +29,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
   const missing = typeof sp.missing === "string" ? sp.missing : null;
   const complete = isProfileComplete(user);
   const dob = user.dateOfBirth ? user.dateOfBirth.toISOString().slice(0, 10) : null;
+  const deletionRequest = await getMyPendingDeletionRequest(user.id);
   const payoutMethod = await db.payoutMethod.findUnique({
     where: { userId: user.id },
     select: {
@@ -115,11 +118,9 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
         <h2 id="delete-heading" className="text-lg font-semibold">
           Delete account
         </h2>
-        <p className="text-muted-foreground text-sm">
-          Team captains must hand over captaincy or disband their team first. Accounts with a prize
-          payout in progress can be deleted once it is paid.
-        </p>
-        <DeleteAccountDialog />
+        <DeletionRequestPanel
+          requestedAt={deletionRequest ? formatIST(deletionRequest.createdAt) : null}
+        />
       </section>
     </div>
   );

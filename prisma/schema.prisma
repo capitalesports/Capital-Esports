@@ -128,15 +128,15 @@ model User {
   updatedAt                DateTime  @updatedAt
 
   gameProfiles      GameProfile[]
-  captainOf         Team[]                @relation("TeamCaptain")
+  captainOf         Team[]                   @relation("TeamCaptain")
   teamMemberships   TeamMember[]
   registrations     Registration[]
   rosterEntries     RegistrationMember[]
   pointsEntries     PointsEntry[]
-  createdMatches    Match[]               @relation("MatchCreatedBy")
-  submittedResults  Result[]              @relation("ResultSubmittedBy")
-  approvedResults   Result[]              @relation("ResultApprovedBy")
-  bansCreated       Ban[]                 @relation("BanCreatedBy")
+  createdMatches    Match[]                  @relation("MatchCreatedBy")
+  submittedResults  Result[]                 @relation("ResultSubmittedBy")
+  approvedResults   Result[]                 @relation("ResultApprovedBy")
+  bansCreated       Ban[]                    @relation("BanCreatedBy")
   auditLogs         AuditLog[]
   payments          Payment[]
   payouts           Payout[]
@@ -146,8 +146,10 @@ model User {
   emailCodes        EmailCode[]
   leaderboardRows   LeaderboardSnapshot[]
   seasonResults     SeasonResult[]
-  reportsFiled      Report[]              @relation("ReportReporter")
-  reportsAgainst    Report[]              @relation("ReportTarget")
+  reportsFiled      Report[]                 @relation("ReportReporter")
+  reportsAgainst    Report[]                 @relation("ReportTarget")
+  deletionRequests  AccountDeletionRequest[] @relation("DeletionRequester")
+  deletionDecisions AccountDeletionRequest[] @relation("DeletionDecider")
 
   @@index([displayName])
 }
@@ -792,4 +794,29 @@ model AnalyticsEvent {
 
   @@unique([name, userId])
   @@index([name, createdAt])
+}
+
+enum DeletionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// A player's request to delete their account; an admin approves (the account is erased) or rejects it.
+model AccountDeletionRequest {
+  id          String                @id @default(cuid())
+  userId      String
+  reason      String?
+  status      DeletionRequestStatus @default(PENDING)
+  createdAt   DateTime              @default(now())
+  decidedAt   DateTime?
+  decidedById String?
+  adminNote   String?
+
+  user      User  @relation("DeletionRequester", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy User? @relation("DeletionDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId, status])
 }

@@ -58,7 +58,7 @@ async function dashboardStats(isAdmin: boolean, now: Date): Promise<Stat[]> {
     { label: "Registration open", value: open, href: "/admin/matches?status=REGISTRATION_OPEN" },
   ];
   if (!isAdmin) return stats;
-  const [payouts, flags, messages] = await Promise.all([
+  const [payouts, flags, messages, deletions] = await Promise.all([
     db.payout.aggregate({
       where: { status: "PENDING", voidedAt: null },
       _count: true,
@@ -66,6 +66,7 @@ async function dashboardStats(isAdmin: boolean, now: Date): Promise<Stat[]> {
     }),
     db.reconciliationFlag.count({ where: { resolvedAt: null } }),
     db.contactMessage.count({ where: { handled: false } }),
+    db.accountDeletionRequest.count({ where: { status: "PENDING" } }),
   ]);
   return [
     ...stats.slice(0, 3),
@@ -81,6 +82,12 @@ async function dashboardStats(isAdmin: boolean, now: Date): Promise<Stat[]> {
       label: "Unhandled contact messages",
       value: messages,
       href: "/admin/content#messages",
+      alert: true,
+    },
+    {
+      label: "Account deletion requests",
+      value: deletions,
+      href: "/admin/deletion-requests",
       alert: true,
     },
     ...stats.slice(3),

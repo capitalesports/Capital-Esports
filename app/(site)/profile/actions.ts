@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { runAction } from "@/server/action";
 import { requireUser } from "@/server/auth/guards";
-import { clearSessionCookie } from "@/server/auth/session";
 import {
   changePhone,
-  deleteAccount,
   saveGameProfile,
   updateAvatar,
   updateProfile,
@@ -18,6 +16,10 @@ import {
   requestEmailVerification,
   setEmailOptIn,
 } from "@/server/services/email";
+import {
+  cancelAccountDeletionRequest,
+  requestAccountDeletion,
+} from "@/server/services/account-deletion";
 import { savePayoutMethod } from "@/server/services/payouts";
 
 export async function updateProfileAction(input: { displayName: string; dateOfBirth: string }) {
@@ -52,12 +54,18 @@ export async function saveGameProfileAction(input: {
   }, "Game ID saved");
 }
 
-export async function deleteAccountAction(input: { confirm: string }) {
+export async function requestAccountDeletionAction(input: { reason?: string }) {
   return runAction(async () => {
-    await deleteAccount(await requireUser(), input);
-    await clearSessionCookie();
-    revalidatePath("/", "layout");
-  }, "Your account was deleted");
+    await requestAccountDeletion(await requireUser(), input);
+    revalidatePath("/profile");
+  }, "Deletion request sent. An admin will review it.");
+}
+
+export async function cancelAccountDeletionRequestAction() {
+  return runAction(async () => {
+    await cancelAccountDeletionRequest(await requireUser());
+    revalidatePath("/profile");
+  }, "Deletion request cancelled");
 }
 
 export async function changePhoneAction(input: { idToken: string }) {
@@ -91,10 +99,13 @@ export async function removeEmailAction() {
 }
 
 export async function setEmailOptInAction(input: { optIn: boolean }) {
-  return runAction(async () => {
-    await setEmailOptIn(await requireUser(), input);
-    revalidatePath("/profile");
-  }, input.optIn ? "Email notifications on" : "Email notifications off");
+  return runAction(
+    async () => {
+      await setEmailOptIn(await requireUser(), input);
+      revalidatePath("/profile");
+    },
+    input.optIn ? "Email notifications on" : "Email notifications off",
+  );
 }
 
 export async function savePayoutMethodAction(input: Record<string, string>) {

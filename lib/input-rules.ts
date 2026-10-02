@@ -84,3 +84,7 @@ export function safeReturnTo(value: string | null | undefined, fallback = "/dash
   }
   return value;
 }
+
+/** Account deletion requests (DECISIONS M39): the player's optional reason, the admin's note. */
+export const DELETION_REASON_MAX = 500;
+export const DELETION_NOTE_MAX = 300;

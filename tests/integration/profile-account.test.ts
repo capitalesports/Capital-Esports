@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { changePhone, deleteAccount } from "@/server/services/profile";
+import { changePhone, eraseAccount } from "@/server/services/profile";
 import type { Actor } from "@/lib/roles";
 import { addMinutes } from "@/lib/time";
 import { createMatch, createPlayer, createUser, resetDb, testDb } from "../helpers/db";
@@ -12,21 +12,7 @@ beforeEach(async () => {
   admin = { id: (await createUser({ role: "ADMIN" })).id, role: "ADMIN" };
 });
 
-describe("deleteAccount", () => {
-  it("requires a logged-in user", async () => {
-    await expect(deleteAccount(null, { confirm: "DELETE" })).rejects.toMatchObject({
-      code: "UNAUTHENTICATED",
-    });
-  });
-
-  it("requires the word DELETE", async () => {
-    const me = player(await createPlayer());
-    for (const confirm of ["delete", "", "DELETE ", undefined]) {
-      await expect(deleteAccount(me, { confirm })).rejects.toMatchObject({ code: "VALIDATION" });
-    }
-    expect((await testDb().user.findUniqueOrThrow({ where: { id: me.id } })).deletedAt).toBeNull();
-  });
-
+describe("eraseAccount (admin-approved deletion, DECISIONS M39)", () => {
   it("refuses a team captain", async () => {
     const u = await createPlayer();
     await testDb().team.create({
@@ -37,7 +23,7 @@ describe("deleteAccount", () => {
         members: { create: { userId: u.id, game: "FREE_FIRE", status: "CONFIRMED" } },
       },
     });
-    await expect(deleteAccount(player(u), { confirm: "DELETE" })).rejects.toMatchObject({
+    await expect(eraseAccount(u.id, admin.id)).rejects.toMatchObject({
       code: "CONFLICT",
       message: expect.stringContaining("captain"),
     });
@@ -49,11 +35,11 @@ describe("deleteAccount", () => {
     const payout = await testDb().payout.create({
       data: { userId: u.id, matchId: m.id, place: 1, amountPaise: 10000, status: "PENDING" },
     });
-    await expect(deleteAccount(player(u), { confirm: "DELETE" })).rejects.toMatchObject({
+    await expect(eraseAccount(u.id, admin.id)).rejects.toMatchObject({
       code: "CONFLICT",
     });
     await testDb().payout.update({ where: { id: payout.id }, data: { voidedAt: new Date() } });
-    await expect(deleteAccount(player(u), { confirm: "DELETE" })).resolves.toBeUndefined();
+    await expect(eraseAccount(u.id, admin.id)).resolves.toBeUndefined();
   });
 
   it("refuses while in a match that can no longer be cancelled", async () => {
@@ -62,7 +48,7 @@ describe("deleteAccount", () => {
     await testDb().registration.create({
       data: { matchId: m.id, userId: u.id, status: "CONFIRMED", position: 1 },
     });
-    await expect(deleteAccount(player(u), { confirm: "DELETE" })).rejects.toMatchObject({
+    await expect(eraseAccount(u.id, admin.id)).rejects.toMatchObject({
       code: "CONFLICT",
     });
   });
@@ -71,7 +57,10 @@ describe("deleteAccount", () => {
     const u = await createPlayer("FREE_FIRE");
     const other = await createPlayer();
     const free = await createMatch(admin.id, { maxSlots: 1 });
-    const paid = await createMatch(admin.id, { entryFeePaise: 5000, startsAt: addMinutes(new Date(), 300) });
+    const paid = await createMatch(admin.id, {
+      entryFeePaise: 5000,
+      startsAt: addMinutes(new Date(), 300),
+    });
     await testDb().registration.create({
       data: { matchId: free.id, userId: u.id, status: "CONFIRMED", position: 1 },
     });
@@ -93,7 +82,10 @@ describe("deleteAccount", () => {
         expiresAt: addMinutes(new Date(), 10),
       },
     });
-    await testDb().registration.update({ where: { id: paidReg.id }, data: { paymentId: payment.id } });
+    await testDb().registration.update({
+      where: { id: paidReg.id },
+      data: { paymentId: payment.id },
+    });
     const team = await testDb().team.create({
       data: {
         game: "FREE_FIRE",
@@ -111,14 +103,26 @@ describe("deleteAccount", () => {
       data: { userId: u.id, endpoint: "https://push.example/1", p256dh: "k", auth: "a" },
     });
 
-    await deleteAccount(player(u), { confirm: "DELETE" });
+    await testDb().user.update({
+      where: { id: u.id },
+      data: { googleId: "google-sub-erase", passwordHash: "scrypt$x" },
+    });
+
+    await eraseAccount(u.id, admin.id);
 
     const after = await testDb().user.findUniqueOrThrow({
       where: { id: u.id },
       include: { gameProfiles: true, teamMemberships: true, pushSubscriptions: true },
     });
     expect(after.deletedAt).not.toBeNull();
-    expect(after).toMatchObject({ displayName: null, avatarUrl: null, dateOfBirth: null });
+    expect(after).toMatchObject({
+      displayName: null,
+      avatarUrl: null,
+      dateOfBirth: null,
+      email: null,
+      googleId: null,
+      passwordHash: null,
+    });
     expect(after.gameProfiles).toHaveLength(0);
     expect(after.teamMemberships).toHaveLength(0);
     expect(after.pushSubscriptions).toHaveLength(0);
@@ -128,14 +132,18 @@ describe("deleteAccount", () => {
     expect(regs.every((r) => r.status === "CANCELLED")).toBe(true);
     // The freed slot went to the waitlist.
     expect(
-      (await testDb().registration.findUniqueOrThrow({
-        where: { matchId_userId: { matchId: free.id, userId: other.id } },
-      })).status,
+      (
+        await testDb().registration.findUniqueOrThrow({
+          where: { matchId_userId: { matchId: free.id, userId: other.id } },
+        })
+      ).status,
     ).toBe("CONFIRMED");
     const refunded = await testDb().payment.findUniqueOrThrow({ where: { id: payment.id } });
     expect(["REFUND_PENDING", "REFUNDED"]).toContain(refunded.status);
     expect(
-      await testDb().auditLog.count({ where: { action: "user.deleteAccount", entityId: u.id } }),
+      await testDb().auditLog.count({
+        where: { action: "user.deleteAccount", entityId: u.id, actorId: admin.id },
+      }),
     ).toBe(1);
   });
 });

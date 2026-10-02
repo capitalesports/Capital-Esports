@@ -116,24 +116,21 @@ export async function saveGameProfile(actor: Actor | null, input: unknown) {
 const ACTIVE_REG = ["PENDING", "PENDING_PAYMENT", "CONFIRMED", "WAITLISTED"] as const;
 const UNFINISHED_MATCH = ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE"] as const;
 
-export const deleteAccountSchema = z.object({
-  confirm: z.literal("DELETE", { error: "Type DELETE to confirm." }),
-});
-
 /**
- * Delete my account (soft delete). Refused while I captain a team or have a payout in flight,
- * or while I am in a match that can no longer be cancelled. Upcoming registrations are cancelled
- * (paid entries refunded), personal data is cleared and the phone stays reserved (bans/strikes).
+ * Erase an account (soft delete) once an admin approves the player's deletion request
+ * (DECISIONS M39; players can't delete directly). Refused while the player captains a team or has
+ * a payout in flight, or is in a match that can no longer be cancelled. Upcoming registrations are
+ * cancelled (paid entries refunded), personal data, the Google link and the password are cleared,
+ * and the phone stays reserved (bans/strikes). Callers check the admin role.
  */
-export async function deleteAccount(actor: Actor | null, input: unknown, now = new Date()) {
-  const me = assertUser(actor);
-  parseInput(deleteAccountSchema, input);
+export async function eraseAccount(userId: string, approvedById: string, now = new Date()) {
+  const me = { id: userId };
 
   const captain = await db.team.findFirst({ where: { captainId: me.id }, select: { name: true } });
   if (captain) {
     throw new AppError(
       "CONFLICT",
-      `You captain ${captain.name}. Make someone else captain or leave (disband) the team first.`,
+      `The player captains ${captain.name}. They must make someone else captain or disband the team first.`,
     );
   }
   const inFlight = await db.payout.count({
@@ -142,7 +139,7 @@ export async function deleteAccount(actor: Actor | null, input: unknown, now = n
   if (inFlight) {
     throw new AppError(
       "CONFLICT",
-      "You have a prize payout in progress. Wait until it is paid before deleting your account.",
+      "The player has a prize payout in progress. Approve the deletion once it is paid.",
     );
   }
 
@@ -160,7 +157,7 @@ export async function deleteAccount(actor: Actor | null, input: unknown, now = n
   if (rosterSpots || ownRegs.some((r) => !canCancelRegistration(r.match, now))) {
     throw new AppError(
       "CONFLICT",
-      "You are in a match that can no longer be cancelled (or on a team roster). Try again after it ends.",
+      "The player is in a match that can no longer be cancelled (or on a team roster). Approve after it ends.",
     );
   }
 
@@ -211,11 +208,14 @@ export async function deleteAccount(actor: Actor | null, input: unknown, now = n
         // The email is freed (the phone stays reserved, DECISIONS M7).
         email: null,
         emailVerifiedAt: null,
+        // Free the Google account and drop the password so the person can sign up again (M39).
+        googleId: null,
+        passwordHash: null,
         deletedAt: now,
       },
     });
     await writeAudit(tx, {
-      actorId: me.id,
+      actorId: approvedById,
       action: "user.deleteAccount",
       entityType: "User",
       entityId: me.id,
