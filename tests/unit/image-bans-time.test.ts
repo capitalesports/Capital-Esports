@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { banMessage, isAccountBanned, isBanRecordActive, isRegistrationBlocked } from "@/lib/bans";
 import { checkImage, detectImageMime } from "@/lib/image";
-import { isProtectedPath } from "@/lib/protected-paths";
+import { isHiddenAdminPath, isProtectedPath } from "@/lib/protected-paths";
 import { formatIST, istDayKey, istInputToUtc, startOfIstDay, utcToIstInput } from "@/lib/time";
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
@@ -92,6 +92,17 @@ describe("IST time helpers", () => {
 
   it("formats in IST", () => {
     expect(formatIST(new Date("2026-09-27T15:30:00Z"))).toMatch(/9:00\s?pm IST$/i);
+  });
+});
+
+describe("hidden admin paths (DECISIONS M40)", () => {
+  it("covers /admin and everything under it, nothing else", () => {
+    for (const p of ["/admin", "/admin/", "/admin/users", "/admin/deletion-requests"]) {
+      expect(isHiddenAdminPath(p)).toBe(true);
+    }
+    for (const p of ["/administrator", "/login", "/dashboard", "/api/admin"]) {
+      expect(isHiddenAdminPath(p)).toBe(false);
+    }
   });
 });
 

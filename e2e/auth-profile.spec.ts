@@ -6,11 +6,15 @@ import { pickDob } from "./support/picker";
 
 test.describe.configure({ mode: "serial" });
 
-test("protected pages redirect to login with returnTo", async ({ page }) => {
+test("protected pages redirect to login with returnTo; the admin panel is a 404", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login\?returnTo=%2Fdashboard$/);
-  await page.goto("/admin/users");
-  await expect(page).toHaveURL(/\/login\?returnTo=%2Fadmin%2Fusers$/);
+  // The admin panel is hidden from logged-out visitors: 404, no login page (DECISIONS M40).
+  for (const path of ["/admin", "/admin/users"]) {
+    const res = await page.goto(path);
+    expect(res?.status(), path).toBe(404);
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+  }
 });
 
 test("wrong OTP shows a generic error", async ({ page }) => {

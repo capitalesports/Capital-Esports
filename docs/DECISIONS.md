@@ -495,3 +495,10 @@ At the owner's request, players can no longer delete their account themselves.
   - **Decline** keeps the account and sends the player a notification with the admin's optional note.
   - Every step is audited (`user.deletionRequest.*`, `user.deleteAccount` with the admin as actor).
 - **Erasing now also clears the Google link and the password,** like the email (M7 keeps only the phone). Before, a deleted Google account blocked that Google login forever. A migration clears both on accounts that were already deleted.
+
+### M40 The admin panel is a 404 for logged-out visitors
+At the owner's request, nobody outside the staff should see that an admin panel exists.
+- `proxy.ts` answers **404** to any `/admin…` request without a valid session, instead of redirecting to `/login?returnTo=/admin…`.
+- Players who are logged in already got a 404 (`requireStaffPage`), and moderators get one on admin-only sections.
+- **Staff log in at `/login` first**, then open `/admin`. There is no separate admin login page, so nothing on the public site points to the panel.
+- Server actions and route handlers still check the role on every call, so hiding the pages is an extra layer, not the protection itself.

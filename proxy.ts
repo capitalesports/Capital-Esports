@@ -7,14 +7,15 @@ import {
   verifySession,
 } from "@/lib/session-token";
 import { gameFromSlug } from "@/lib/games";
-import { isProtectedPath } from "@/lib/protected-paths";
+import { isHiddenAdminPath, isProtectedPath } from "@/lib/protected-paths";
 import { buildCsp } from "@/lib/security-headers";
 
 /** /games/<slug>, /leaderboard/<slug>, /tournament/<slug> */
 const GAME_ROUTE = /^\/(?:games|leaderboard|tournament)\/([^/]+)/;
 
 /**
- * Optimistic auth check (JWT only, no DB): logged-out visitors to protected pages go to /login.
+ * Optimistic auth check (JWT only, no DB): logged-out visitors to protected pages go to /login,
+ * except the admin panel, which answers 404.
  * Real authorisation happens server-side in pages, actions and route handlers.
  * Also re-issues the session cookie once a day so active users stay logged in (rolling 7 days).
  */
@@ -28,6 +29,13 @@ export async function proxy(request: NextRequest) {
   const slug = GAME_ROUTE.exec(pathname)?.[1];
   if (slug && !gameFromSlug(slug)) {
     return NextResponse.rewrite(new URL("/_not-found", request.url), { status: 404 });
+  }
+
+  // Logged-out visitors never learn the admin panel exists: a plain 404, no login redirect (M40).
+  if (!claims && isHiddenAdminPath(pathname)) {
+    const res = NextResponse.rewrite(new URL("/_not-found", request.url), { status: 404 });
+    if (token) res.cookies.delete(SESSION_COOKIE);
+    return res;
   }
 
   if (!claims && isProtectedPath(pathname)) {
