@@ -3,12 +3,14 @@ name: Keep timers running
 # Vercel's Hobby plan runs our crons once a day. Every page view runs the throttled status catch-up
 # (registration open/close, 30-minute match reminders, room notices; DECISIONS M27), so opening a
 # public page every 5 minutes keeps those on time and keeps the server and database warm (no slow
-# first load). No secret is needed. Only during playing hours, 3:30 PM to 12:25 AM IST
-# (10:00-18:55 UTC): a database kept awake all day would use up the free plan's monthly compute
-# (DECISIONS M45). GitHub may delay scheduled runs by a few minutes.
+# first load). No secret is needed. Only during playing hours, 12:00 PM to 11:55 PM IST (06:30 to
+# 18:25 UTC; GitHub schedules are in UTC): a database kept awake all day would use up the Neon free
+# plan's 100 CU-hours a month (DECISIONS M45). GitHub may delay scheduled runs by a few minutes.
 on:
   schedule:
-    - cron: "*/5 10-18 * * *"
+    - cron: "30-55/5 6 * * *"
+    - cron: "*/5 7-17 * * *"
+    - cron: "0-25/5 18 * * *"
   workflow_dispatch:
 
 permissions: {}
