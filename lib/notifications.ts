@@ -125,7 +125,7 @@ export function messageFor(
       return {
         type: event.type,
         title: "Starting in 30 minutes",
-        body: `${match} starts in 30 minutes. Be ready to join the room.`,
+        body: `${match} starts in 30 minutes. The room ID and password are on the match page and your dashboard once the host shares them.`,
         url: matchUrl,
       };
     case "RESULTS_APPROVED":
@@ -222,16 +222,18 @@ export const PUSH_EVENTS: ReadonlySet<NotificationType> = new Set([
   "PRIZE_WON",
 ]);
 
-/** Events also emailed to players with a verified email who kept email notifications on. */
+/**
+ * Events also emailed to players with a verified email who kept email notifications on.
+ * "Room ID is ready" and "Results are in" are in-app only, to save the daily email quota
+ * (DECISIONS M46): the 30-minute reminder already sends players to the room details.
+ */
 export const EMAIL_EVENTS: ReadonlySet<NotificationType> = new Set([
   "REGISTRATION_CONFIRMED",
   "WAITLIST_PROMOTED",
   "ROSTER_INVITE",
   "TEAM_INVITE",
-  "ROOM_CREDENTIALS_AVAILABLE",
   "MATCH_STARTING_SOON",
   "RESULTS_OPEN",
-  "RESULTS_APPROVED",
   "DISPUTE_RESOLVED",
   "PAYOUT_STATUS",
   "MATCH_CANCELLED",

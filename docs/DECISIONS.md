@@ -563,3 +563,10 @@ The test account's Razorpay refund API refused every request, and the owner will
 Vercel's Hobby plan runs crons once a day. The 30-minute match reminder, room notices and registration open/close only ran when someone opened a page, through the throttled catch-up (M27).
 - `.github/workflows/keep-alive.yml` opens `https://capitalesports.in/scrims` every 5 minutes. Public pages are rendered fresh (`no-store`), so each visit runs the catch-up. No secret is involved.
 - GitHub can delay scheduled runs by a few minutes, which the 30-minute reminder window absorbs. GitHub pauses schedules after 60 days without commits. A paid Vercel plan (crons every 5 minutes) or an external pinger such as cron-job.org would replace it.
+
+### M46 Fewer emails: no email for "Room ID is ready" or "Results are in"
+At the owner's request, to save the daily email quota (Resend free plan: about 100 a day), these two notices are now in-app only (bell, plus push if turned on):
+- **Room ID is ready** (`ROOM_CREDENTIALS_AVAILABLE`)
+- **Results are in** (`RESULTS_APPROVED`)
+
+The 30-minute reminder email now says that the room ID and password are on the match page and dashboard. Slot confirmations, the reminder, cancellations, prizes and the other events are still emailed (`EMAIL_EVENTS` in `lib/notifications.ts`).
