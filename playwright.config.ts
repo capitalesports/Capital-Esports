@@ -46,6 +46,8 @@ export default defineConfig({
       FIREBASE_ADMIN_CLIENT_EMAIL: "",
       FIREBASE_ADMIN_PRIVATE_KEY: "",
       PAYMENTS_ENABLED: "true",
+      // The specs log in by phone with the local OTP stub; the site has phone login off (M37).
+      NEXT_PUBLIC_PHONE_LOGIN: "on",
       NEXT_PUBLIC_SITE_URL: baseURL,
     },
   },

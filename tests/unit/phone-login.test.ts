@@ -4,12 +4,12 @@ import { phoneLoginEnabled } from "@/lib/phone-login";
 describe("phoneLoginEnabled", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("is on unless the switch says off", () => {
+  it("is off unless the switch says on", () => {
     vi.stubEnv("NEXT_PUBLIC_PHONE_LOGIN", "");
-    expect(phoneLoginEnabled()).toBe(true);
-    vi.stubEnv("NEXT_PUBLIC_PHONE_LOGIN", "on");
-    expect(phoneLoginEnabled()).toBe(true);
+    expect(phoneLoginEnabled()).toBe(false);
     vi.stubEnv("NEXT_PUBLIC_PHONE_LOGIN", "off");
     expect(phoneLoginEnabled()).toBe(false);
+    vi.stubEnv("NEXT_PUBLIC_PHONE_LOGIN", "on");
+    expect(phoneLoginEnabled()).toBe(true);
   });
 });
