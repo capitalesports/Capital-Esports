@@ -6,6 +6,7 @@ import {
   reopenResultsAction,
   saveResultRowsAction,
 } from "@/app/admin/results/actions";
+import { ScreenshotReader, type ReadOutcome } from "@/components/admin/screenshot-reader";
 import { useAction } from "@/components/common/use-action";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -67,6 +68,37 @@ export function ResultsEditor({
     })),
   );
   const [reason, setReason] = useState("");
+  // After a screenshot read: how each entry was filled, and names that matched nobody (M48).
+  const [hints, setHints] = useState<Map<string, { exact: boolean; readNames: string[] }> | null>(
+    null,
+  );
+  const [unmatched, setUnmatched] = useState<string[]>([]);
+  const applyRead = (outcome: ReadOutcome) => {
+    const byId = new Map(outcome.suggestions.map((sg) => [sg.registrationId, sg]));
+    const anyWinner = outcome.suggestions.some((sg) => sg.won === true);
+    setRows((rs) =>
+      rs.map((r) => {
+        const sg = byId.get(r.registrationId);
+        if (!sg) return battleRoyale || !anyWinner ? r : { ...r, won: false };
+        return {
+          ...r,
+          absent: false,
+          placement: sg.placement !== null ? String(sg.placement) : r.placement,
+          kills: sg.kills !== null ? String(sg.kills) : r.kills,
+          won: sg.won ?? r.won,
+        };
+      }),
+    );
+    setHints(
+      new Map(
+        outcome.suggestions.map((sg) => [
+          sg.registrationId,
+          { exact: sg.confidence === "exact", readNames: sg.readNames },
+        ]),
+      ),
+    );
+    setUnmatched(outcome.unmatched);
+  };
   const save = useAction(saveResultRowsAction);
   const approve = useAction(approveResultsAction);
   const reopen = useAction(reopenResultsAction);
@@ -95,8 +127,7 @@ export function ResultsEditor({
       const next = rs.map((r, j) => (j === i ? { ...r, absent, won: absent ? false : r.won } : r));
       const left = next.filter((r) => !r.absent);
       // Head-to-head walkover: the only side that showed up wins.
-      if (!battleRoyale && left.length === 1)
-        return next.map((r) => ({ ...r, won: !r.absent }));
+      if (!battleRoyale && left.length === 1) return next.map((r) => ({ ...r, won: !r.absent }));
       return next;
     });
 
@@ -117,6 +148,20 @@ export function ResultsEditor({
 
   return (
     <div className="space-y-4">
+      {editable ? <ScreenshotReader matchId={matchId} onRead={applyRead} /> : null}
+      {hints ? (
+        <p role="status" className="bg-surface rounded-lg p-3 text-sm">
+          Filled {hints.size} of {entries.length} from the screenshots. Check every highlighted
+          player before approving.
+          {unmatched.length ? (
+            <>
+              {" "}
+              Names not matched to anyone:{" "}
+              <span className="font-medium">{unmatched.join(", ")}</span>.
+            </>
+          ) : null}
+        </p>
+      ) : null}
       {conflicts.length ? (
         <p role="alert" className="bg-destructive/15 text-destructive rounded-lg p-3 text-sm">
           Placement conflict: {conflicts.join(", ")} claimed by more than{" "}
@@ -141,15 +186,34 @@ export function ResultsEditor({
         {entries.map((e, i) => {
           const row = rows[i]!;
           const conflict = battleRoyale && !row.absent && conflicts.includes(Number(row.placement));
+          const hint = hints?.get(e.registrationId);
           return (
             <article
               key={e.registrationId}
               aria-label={`Result for ${e.name}`}
               className={cn(
                 "space-y-3 rounded-xl border p-3",
-                conflict ? "border-destructive" : "border-border",
+                conflict
+                  ? "border-destructive"
+                  : hints && (!hint || !hint.exact)
+                    ? "border-gold"
+                    : "border-border",
               )}
             >
+              {hints ? (
+                <p
+                  className={cn(
+                    "rounded-md px-2 py-1 text-xs font-medium",
+                    hint?.exact ? "text-success bg-success/10" : "text-gold bg-gold/10",
+                  )}
+                >
+                  {!hint
+                    ? "Not found in the screenshots: fill in or tick no-show"
+                    : hint.exact
+                      ? "Filled from the screenshot"
+                      : `Check: read as “${hint.readNames.join(", ")}”`}
+                </p>
+              ) : null}
               <div className="flex items-center justify-between gap-2">
                 <h3 className="font-semibold">{e.name}</h3>
                 <span className="text-muted-foreground text-xs">

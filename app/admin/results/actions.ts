@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { runAction } from "@/server/action";
 import { requireModerator } from "@/server/auth/guards";
+import { AppError } from "@/server/errors";
+import { readResultScreenshots } from "@/server/services/result-screenshots";
 import { approveResults, reopenResults, saveResultRows } from "@/server/services/results";
 
 function refresh(matchId: string) {
@@ -42,4 +44,20 @@ export async function reopenResultsAction(input: { matchId: string; reason?: str
     await reopenResults(await requireModerator(), input);
     refresh(input.matchId);
   }, "Results reopened and points reversed");
+}
+
+/** Read end-of-match screenshots with AI and return suggestions for the editor (DECISIONS M48). */
+export async function readResultScreenshotsAction(form: FormData) {
+  return runAction(async () => {
+    const actor = await requireModerator();
+    const files = form.getAll("screenshots");
+    if (files.some((f) => !(f instanceof File)))
+      throw new AppError("VALIDATION", "Invalid screenshot.");
+    const images = await Promise.all(
+      (files as File[])
+        .filter((f) => f.size > 0)
+        .map(async (f) => new Uint8Array(await f.arrayBuffer())),
+    );
+    return readResultScreenshots(actor, { matchId: String(form.get("matchId") ?? "") }, images);
+  });
 }

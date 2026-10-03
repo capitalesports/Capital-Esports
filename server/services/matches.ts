@@ -1,4 +1,5 @@
 import "server-only";
+import { PLAYERS_SUBMIT_RESULTS } from "@/lib/results-config";
 import { z } from "zod";
 import type { RegistrationStatus } from "@/generated/prisma/client";
 import { writeAudit } from "@/server/audit";
@@ -232,7 +233,10 @@ export async function transitionMatchStatus(actor: Actor | null, input: unknown)
   });
   await sendLobbyNotices(split);
   if (to === "LIVE") await releaseUnplaced(matchId);
-  if (from === "LIVE" && to === "RESULTS_PENDING") await notifyResultsOpen(matchId);
+  // Staff fill results from screenshots (M48); players get no "Submit your result" notice.
+  if (from === "LIVE" && to === "RESULTS_PENDING" && PLAYERS_SUBMIT_RESULTS) {
+    await notifyResultsOpen(matchId);
+  }
 }
 
 /** "Submit your result" to every confirmed registrant (solo players and team captains). */
@@ -323,7 +327,10 @@ export async function cancelMatchInTx(
   const refunds = await enqueueMatchRefunds(tx, match.id);
   const userIds = [
     ...new Set(
-      affected.flatMap((r) => [r.userId, ...r.members.flatMap((m) => (m.userId ? [m.userId] : []))]),
+      affected.flatMap((r) => [
+        r.userId,
+        ...r.members.flatMap((m) => (m.userId ? [m.userId] : [])),
+      ]),
     ),
   ];
   return { matchId: match.id, reason, cancelledRegistrations: count, refunds, userIds };
@@ -350,28 +357,44 @@ export async function deleteMatch(actor: Actor | null, input: unknown) {
   await db.$transaction(async (tx) => {
     const match = await loadMatch(tx, matchId);
     if (match.isEntryList || match.bracketRound !== null) {
-      throw new AppError("CONFLICT", "Tournament sign-up lists and bracket matches can't be deleted. Cancel the tournament instead.");
+      throw new AppError(
+        "CONFLICT",
+        "Tournament sign-up lists and bracket matches can't be deleted. Cancel the tournament instead.",
+      );
     }
     // Money is never deleted: entry fees need refunds (cancel instead), started prizes stay on record.
     const [payments, lobbies, lockedPayouts] = await Promise.all([
       tx.payment.count({ where: { matchId } }),
       tx.match.count({ where: { parentMatchId: matchId } }),
       tx.payout.count({
-        where: { matchId, voidedAt: null, OR: [{ status: { not: "PENDING" } }, { approvedAt: { not: null } }] },
+        where: {
+          matchId,
+          voidedAt: null,
+          OR: [{ status: { not: "PENDING" } }, { approvedAt: { not: null } }],
+        },
       }),
     ]);
     if (payments) {
-      throw new AppError("CONFLICT", "Entry fees were paid for this match. Cancel it instead, so they are refunded.");
+      throw new AppError(
+        "CONFLICT",
+        "Entry fees were paid for this match. Cancel it instead, so they are refunded.",
+      );
     }
     if (lockedPayouts) {
-      throw new AppError("CONFLICT", "This match's prize payout is already approved or being paid, so it can't be deleted.");
+      throw new AppError(
+        "CONFLICT",
+        "This match's prize payout is already approved or being paid, so it can't be deleted.",
+      );
     }
     if (lobbies) {
       throw new AppError("CONFLICT", "This match was split into games. Delete those games first.");
     }
     // A played match (DECISIONS M25): take back its points and no-show strikes, void its pending
     // prize, then delete it with its registrations and results.
-    const points = await tx.pointsEntry.findMany({ where: { matchId }, select: { seasonId: true } });
+    const points = await tx.pointsEntry.findMany({
+      where: { matchId },
+      select: { seasonId: true },
+    });
     const noShowsRestored = await restoreNoShows(tx, matchId);
     const { count: payoutsVoided } = await tx.payout.updateMany({
       where: { matchId, voidedAt: null },
@@ -379,7 +402,8 @@ export async function deleteMatch(actor: Actor | null, input: unknown) {
     });
     const registrations = await tx.registration.count({ where: { matchId } });
     await tx.match.delete({ where: { id: matchId } });
-    for (const seasonId of new Set(points.map((p) => p.seasonId))) await refreshLeaderboard(tx, seasonId);
+    for (const seasonId of new Set(points.map((p) => p.seasonId)))
+      await refreshLeaderboard(tx, seasonId);
     await writeAudit(tx, {
       actorId: me.id,
       action: "match.delete",

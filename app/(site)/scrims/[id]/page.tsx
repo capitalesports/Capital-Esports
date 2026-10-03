@@ -10,6 +10,7 @@ import { Markdown } from "@/components/content/markdown";
 import { GameBadge } from "@/components/game/game-badge";
 import { RegistrationPanel } from "@/components/match/registration-panel";
 import { ResultSubmitForm } from "@/components/match/result-submit-form";
+import { PLAYERS_SUBMIT_RESULTS } from "@/lib/results-config";
 import { ResultsTable } from "@/components/match/results-table";
 import { RoomPanel } from "@/components/match/room-panel";
 import { StatusPill } from "@/components/match/status-pill";
@@ -141,14 +142,17 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
           </h2>
           <p className="text-muted-foreground text-sm">
             So many {unit} joined that registration was split into {group.lobbies.length}{" "}
-            {lobbyNoun(match.mode, group.lobbies.length)}. Each {word.toLowerCase()} has its own room, results and prize.
+            {lobbyNoun(match.mode, group.lobbies.length)}. Each {word.toLowerCase()} has its own
+            room, results and prize.
           </p>
           {group.myLobbyId && group.myLobbyId !== match.id ? (
             <p className="border-gold/60 bg-gold/10 rounded-lg border p-3 text-sm" role="status">
               You play in{" "}
-              <Link href={`/scrims/${group.myLobbyId}`} className="text-gold font-semibold underline">
-                {word}{" "}
-                {group.lobbies.find((l) => l.id === group.myLobbyId)?.lobbyNumber ?? ""}
+              <Link
+                href={`/scrims/${group.myLobbyId}`}
+                className="text-gold font-semibold underline"
+              >
+                {word} {group.lobbies.find((l) => l.id === group.myLobbyId)?.lobbyNumber ?? ""}
               </Link>
               : your room ID and password appear there.
             </p>
@@ -249,7 +253,7 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
               <ResultsTable rows={results} battleRoyale={br} />
             </section>
           ) : null}
-          {ownReg ? (
+          {ownReg && PLAYERS_SUBMIT_RESULTS ? (
             <ResultSubmitForm
               matchId={match.id}
               battleRoyale={br}

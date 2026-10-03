@@ -76,19 +76,30 @@ describe("role checks on every match mutation", () => {
 
 describe("deleteMatch", () => {
   it("is admin-only and validates input", async () => {
-    await expect(deleteMatch(null, { matchId: "x" })).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
-    await expect(deleteMatch(player, { matchId: "x" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(deleteMatch(null, { matchId: "x" })).rejects.toMatchObject({
+      code: "UNAUTHENTICATED",
+    });
+    await expect(deleteMatch(player, { matchId: "x" })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
     await expect(deleteMatch(mod, { matchId: "x" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(deleteMatch(admin, {})).rejects.toMatchObject({ code: "VALIDATION" });
-    await expect(deleteMatch(admin, { matchId: "missing" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(deleteMatch(admin, { matchId: "missing" })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
   });
 
   it("deletes an empty match (audited, credentials redacted)", async () => {
     const empty = await createMatchRow(admin.id, { status: "RESULTS_PENDING" });
-    await testDb().match.update({ where: { id: empty.id }, data: { roomId: "123", roomPassword: "secret" } });
+    await testDb().match.update({
+      where: { id: empty.id },
+      data: { roomId: "123", roomPassword: "secret" },
+    });
     await deleteMatch(admin, { matchId: empty.id });
     expect(await testDb().match.findUnique({ where: { id: empty.id } })).toBeNull();
-    const audit = await testDb().auditLog.findFirstOrThrow({ where: { entityId: empty.id, action: "match.delete" } });
+    const audit = await testDb().auditLog.findFirstOrThrow({
+      where: { entityId: empty.id, action: "match.delete" },
+    });
     expect(JSON.stringify(audit.before)).not.toContain("secret");
   });
 
@@ -109,26 +120,47 @@ describe("deleteMatch", () => {
     expect(await testDb().match.findUnique({ where: { id: played.id } })).toBeNull();
     expect(await testDb().registration.count({ where: { matchId: played.id } })).toBe(0);
     expect((await testDb().user.findUniqueOrThrow({ where: { id: absent.id } })).strikes).toBe(0);
-    expect((await testDb().payout.findUniqueOrThrow({ where: { id: prize.id } })).voidReason).toBe("Match deleted");
-    const audit = await testDb().auditLog.findFirstOrThrow({ where: { entityId: played.id, action: "match.delete" } });
+    expect((await testDb().payout.findUniqueOrThrow({ where: { id: prize.id } })).voidReason).toBe(
+      "Match deleted",
+    );
+    const audit = await testDb().auditLog.findFirstOrThrow({
+      where: { entityId: played.id, action: "match.delete" },
+    });
     expect(audit.after).toMatchObject({ registrations: 2, noShowsRestored: 1, payoutsVoided: 1 });
   });
 
   it("refuses a match with paid entry fees or a prize already being paid", async () => {
-    const paid = await createMatchRow(admin.id, { status: "REGISTRATION_OPEN", entryFeePaise: 5000 });
-    const p = await createUser();
-    const reg = await testDb().registration.create({ data: { matchId: paid.id, userId: p.id, status: "CONFIRMED", position: 1 } });
-    await testDb().payment.create({
-      data: { userId: p.id, matchId: paid.id, registrationId: reg.id, orderId: `o-${reg.id}`, amountPaise: 5000, status: "PAID", expiresAt: new Date() },
+    const paid = await createMatchRow(admin.id, {
+      status: "REGISTRATION_OPEN",
+      entryFeePaise: 5000,
     });
-    await expect(deleteMatch(admin, { matchId: paid.id })).rejects.toMatchObject({ code: "CONFLICT" });
+    const p = await createUser();
+    const reg = await testDb().registration.create({
+      data: { matchId: paid.id, userId: p.id, status: "CONFIRMED", position: 1 },
+    });
+    await testDb().payment.create({
+      data: {
+        userId: p.id,
+        matchId: paid.id,
+        registrationId: reg.id,
+        orderId: `o-${reg.id}`,
+        amountPaise: 5000,
+        status: "PAID",
+        expiresAt: new Date(),
+      },
+    });
+    await expect(deleteMatch(admin, { matchId: paid.id })).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
     expect(await testDb().match.findUnique({ where: { id: paid.id } })).not.toBeNull();
 
     const prized = await createMatchRow(admin.id, { status: "COMPLETED" });
     await testDb().payout.create({
       data: { userId: p.id, matchId: prized.id, place: 1, amountPaise: 10_000, status: "SUCCESS" },
     });
-    await expect(deleteMatch(admin, { matchId: prized.id })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(deleteMatch(admin, { matchId: prized.id })).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
   });
 });
 
@@ -147,7 +179,9 @@ describe("createMatch / updateMatch", () => {
 
   it("takes the capacity from the game and mode (no max field)", async () => {
     expect((await createMatch(mod, form())).maxSlots).toBe(25);
-    expect((await createMatch(mod, { ...form(), mode: "TWO_V_TWO", maxSlots: "40" })).maxSlots).toBe(2);
+    expect(
+      (await createMatch(mod, { ...form(), mode: "TWO_V_TWO", maxSlots: "40" })).maxSlots,
+    ).toBe(2);
   });
 
   it("creates an UPCOMING match stored in UTC with an audit row", async () => {
@@ -283,8 +317,16 @@ describe("status controls", () => {
       code: "VALIDATION",
       fieldErrors: { roomPassword: expect.any(Array) },
     });
-    const val = await createMatchRow(admin.id, { status: "REGISTRATION_OPEN", game: "VALORANT", mode: "FIVE_V_FIVE" });
-    await setRoomCredentials(mod, { matchId: val.id, roomId: "PARTY-7788", roomPassword: "ignored" });
+    const val = await createMatchRow(admin.id, {
+      status: "REGISTRATION_OPEN",
+      game: "VALORANT",
+      mode: "FIVE_V_FIVE",
+    });
+    await setRoomCredentials(mod, {
+      matchId: val.id,
+      roomId: "PARTY-7788",
+      roomPassword: "ignored",
+    });
     expect(await testDb().match.findUniqueOrThrow({ where: { id: val.id } })).toMatchObject({
       roomId: "PARTY-7788",
       roomPassword: null,
@@ -334,7 +376,7 @@ describe("status controls", () => {
     expect(notes[0]!.body).toContain("Server outage");
   });
 
-  it("asks confirmed registrants to submit results when a live match ends", async () => {
+  it("sends no 'Submit your result' notice when a live match ends (staff fill results, M48)", async () => {
     const m = await createMatchRow(admin.id, { status: "LIVE" });
     const [a, b] = await Promise.all([createUser(), createUser()]);
     await testDb().registration.createMany({
@@ -344,8 +386,10 @@ describe("status controls", () => {
       ],
     });
     await transitionMatchStatus(mod, { matchId: m.id, to: "RESULTS_PENDING" });
-    const notes = await testDb().notification.findMany({ where: { type: "RESULTS_OPEN" } });
-    expect(notes.map((n) => [n.userId, n.url])).toEqual([[a.id, `/scrims/${m.id}`]]);
+    expect(await testDb().notification.count({ where: { type: "RESULTS_OPEN" } })).toBe(0);
+    expect((await testDb().match.findUniqueOrThrow({ where: { id: m.id } })).status).toBe(
+      "RESULTS_PENDING",
+    );
   });
 });
 
@@ -397,7 +441,10 @@ describe("tournament links, cloning limits and locked fields", () => {
     for (const t of [duo, cancelled, bracket]) {
       await expect(
         createMatch(admin, { ...form(), kind: "TOURNAMENT", tournamentId: t.id }),
-      ).rejects.toMatchObject({ code: "VALIDATION", fieldErrors: { tournamentId: expect.any(Array) } });
+      ).rejects.toMatchObject({
+        code: "VALIDATION",
+        fieldErrors: { tournamentId: expect.any(Array) },
+      });
     }
     const m = await createMatch(admin, { ...form(), kind: "TOURNAMENT", tournamentId: squad.id });
     expect(m.tournamentId).toBe(squad.id);
@@ -433,9 +480,10 @@ describe("tournament links, cloning limits and locked fields", () => {
       code: "CONFLICT",
       fieldErrors: { mode: expect.any(Array) },
     });
-    await expect(
-      updateMatch(admin, m.id, { ...form(), game: "FREE_FIRE" }),
-    ).rejects.toMatchObject({ code: "CONFLICT", fieldErrors: { game: expect.any(Array) } });
+    await expect(updateMatch(admin, m.id, { ...form(), game: "FREE_FIRE" })).rejects.toMatchObject({
+      code: "CONFLICT",
+      fieldErrors: { game: expect.any(Array) },
+    });
     await expect(
       updateMatch(admin, m.id, { ...form(), kind: "TOURNAMENT", tournamentId: "t" }),
     ).rejects.toMatchObject({ code: "CONFLICT", fieldErrors: { kind: expect.any(Array) } });

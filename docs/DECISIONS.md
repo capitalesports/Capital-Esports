@@ -581,3 +581,21 @@ At the owner's request, emails go out for three things only (`EMAIL_EVENTS`):
 Everything else is in the bell (and push, if turned on) only: prizes won, room ready, results, result submission, disputes, payouts, team and roster invites, lobbies, removals and announcements. This replaces M46 and the prize email of M28.
 
 Account emails (sign-up and email-verification codes, login codes) are not notifications and are unchanged. A player in one match costs about 2 emails, so the free plan's ~100 a day covers about 45 players.
+
+### M48 Results filled from screenshots; players don't submit
+At the owner's request, players no longer submit their own results. Staff upload the end-of-match screenshots and the results form fills itself.
+- **Admin → Results → match → "Fill from screenshots":**
+  - Upload up to 4 screenshots, PNG, JPEG or WebP, 5 MB each.
+  - Google Gemini (`GEMINI_API_KEY`, free tier available; `GEMINI_MODEL`, default `gemini-2.5-flash`) reads every row: in-game name plus rank and kills, or won/lost for head-to-head modes.
+  - `lib/result-matching.ts` matches the names to the entries: team name, display names, saved IGNs and game IDs, roster IGNs.
+  - Free Fire look-alike letters are folded (ᴀʟᴘʜᴀ → alpha), and names within 75% similarity count.
+  - A squad's rows share its best placement and add up kills.
+- **Nothing is saved by the read.** The editor fills its form. Each card says "Filled from the screenshot", "Check: read as …" (a close match, gold border) or "Not found". Names that matched nobody are listed. The admin checks, edits and approves as before.
+- **Limits and safety:**
+  - Moderators and admins only.
+  - The match must be in Results pending.
+  - Images are checked by magic bytes.
+  - 30 reads per staff member per hour, to protect the free quota.
+  - Screenshots go to Google for reading. They contain only in-game names and scores.
+  - Without a key, or when the free quota is used up, the button says so and results are typed in by hand.
+- **Players:** `PLAYERS_SUBMIT_RESULTS = false` (`lib/results-config.ts`) hides the player "Submit result" form and stops the "Submit your result" notice. The code stays, so setting it to true brings both back.

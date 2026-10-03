@@ -40,23 +40,24 @@ test.beforeAll(async () => {
   });
 });
 
-test("player submits a result, admin approves, the leaderboard updates, reopening removes the points", async ({ page }) => {
-  // Player 1 submits placement 1 with 6 kills and a screenshot.
+test("admin fills the results (players don't submit), approves, the leaderboard updates, reopening removes the points", async ({ page }) => {
+  // Players no longer get a "Submit your result" form (DECISIONS M48).
   await as(page, PLAYERS[0]!.phone, `/scrims/${matchId}`);
   await page.goto(`/scrims/${matchId}`);
-  const form = page.getByRole("region", { name: "Submit your result" });
-  await form.getByLabel("Placement").fill("1");
-  await form.getByLabel("Kills").fill("6");
-  await form.getByLabel("End-screen screenshot").setInputFiles({ name: "end.png", mimeType: "image/png", buffer: PNG });
-  await form.getByRole("button", { name: "Submit result" }).click();
-  await expect(page.getByText("Result submitted. A moderator will review it.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Submit your result" })).toHaveCount(0);
 
-  // Admin reviews: sets player 2 (2nd, 1 kill), marks player 3 as a no-show, approves.
+  // Admin: screenshot reading isn't configured in e2e (no Gemini key), so it says so and the
+  // results are typed in by hand.
   await as(page, "9999900001", `/admin/results/${matchId}`);
   await page.goto(`/admin/results/${matchId}`);
+  const reader = page.getByRole("region", { name: "Fill from screenshots" });
+  await reader.getByLabel("Screenshots").setInputFiles({ name: "end.png", mimeType: "image/png", buffer: PNG });
+  await reader.getByRole("button", { name: "Read screenshots" }).click();
+  await expect(page.getByText(/Screenshot reading isn't set up yet/)).toBeVisible();
+
   const card1 = page.getByRole("article", { name: `Result for ${PLAYERS[0]!.name}` });
-  await expect(card1.getByLabel("Placement")).toHaveValue("1");
-  await expect(card1.getByRole("img")).toBeVisible();
+  await card1.getByLabel("Placement").fill("1");
+  await card1.getByLabel("Kills").fill("6");
   const card2 = page.getByRole("article", { name: `Result for ${PLAYERS[1]!.name}` });
   await card2.getByLabel("Placement").fill("1");
   await card2.getByLabel("Kills").fill("1");
