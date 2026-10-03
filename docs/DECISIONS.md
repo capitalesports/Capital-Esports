@@ -558,3 +558,8 @@ The test account's Razorpay refund API refused every request, and the owner will
   - the Razorpay payment ID, to search in the dashboard.
 - **Mark refunded** (optional note) closes a refund the admin made by hand: Razorpay dashboard "Issue Refund", or UPI. The payment becomes `REFUNDED`, the nightly retry stops, and `payment.refund.manual` is audited. Admins only.
 - **Never twice:** before creating a refund, the Razorpay gateway also checks the payment's `amount_refunded`. A refund made in the dashboard (which has no receipt from us) is treated as done, never sent again.
+
+### M45 A 5-minute keep-alive for reminders
+Vercel's Hobby plan runs crons once a day. The 30-minute match reminder, room notices and registration open/close only ran when someone opened a page, through the throttled catch-up (M27).
+- `.github/workflows/keep-alive.yml` opens `https://capitalesports.in/scrims` every 5 minutes. Public pages are rendered fresh (`no-store`), so each visit runs the catch-up. No secret is involved.
+- GitHub can delay scheduled runs by a few minutes, which the 30-minute reminder window absorbs. GitHub pauses schedules after 60 days without commits. A paid Vercel plan (crons every 5 minutes) or an external pinger such as cron-job.org would replace it.
