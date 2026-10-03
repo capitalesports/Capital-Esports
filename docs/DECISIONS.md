@@ -586,7 +586,7 @@ Account emails (sign-up and email-verification codes, login codes) are not notif
 At the owner's request, players no longer submit their own results. Staff upload the end-of-match screenshots and the results form fills itself.
 - **Admin → Results → match → "Fill from screenshots":**
   - Upload up to 4 screenshots, PNG, JPEG or WebP, 5 MB each.
-  - Google Gemini (`GEMINI_API_KEY`, free tier available; `GEMINI_MODEL`, default `gemini-2.5-flash`) reads every row: in-game name plus rank and kills, or won/lost for head-to-head modes.
+  - Google Gemini (`GEMINI_API_KEY`, free tier available; `GEMINI_MODEL`, default `gemini-flash-latest`, a rolling alias, because Google retired `gemini-2.5-flash` for new users) reads every row: in-game name plus rank and kills, or won/lost for head-to-head modes.
   - `lib/result-matching.ts` matches the names to the entries: team name, display names, saved IGNs and game IDs, roster IGNs.
   - Free Fire look-alike letters are folded (ᴀʟᴘʜᴀ → alpha), and names within 75% similarity count.
   - A squad's rows share its best placement and add up kills.

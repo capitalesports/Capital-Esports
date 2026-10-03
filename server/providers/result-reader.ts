@@ -15,7 +15,8 @@ export interface ResultReader {
 }
 
 const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models";
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+/** A rolling alias: Google retires fixed models for new users (2.5-flash already was). */
+export const DEFAULT_GEMINI_MODEL = "gemini-flash-latest";
 
 const rowSchema = z.object({
   name: z.string().trim().min(1).max(60),
