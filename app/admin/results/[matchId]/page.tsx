@@ -12,6 +12,8 @@ import { canReopenResults } from "@/lib/points";
 import { formatIST } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Review results" };
+/** Reading screenshots with AI (DECISIONS M48) can take tens of seconds when a model is busy. */
+export const maxDuration = 60;
 
 export default async function AdminMatchResultsPage({
   params,

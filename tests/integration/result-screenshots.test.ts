@@ -14,13 +14,16 @@ const PNG = Uint8Array.from(
 );
 
 let geminiAnswer: { status: number; body: unknown } = { status: 200, body: {} };
+/** Answers used first, one per call (e.g. a busy model before the fallback answers). */
+const geminiQueue: { status: number; body: unknown }[] = [];
 const geminiCalls: { url: string; body: { contents: { parts: unknown[] }[] } }[] = [];
 const realFetch = globalThis.fetch;
 async function fakeFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   if (!url.startsWith("https://generativelanguage.googleapis.com/")) return realFetch(input, init);
   geminiCalls.push({ url, body: JSON.parse(String(init?.body)) });
-  return new Response(JSON.stringify(geminiAnswer.body), { status: geminiAnswer.status });
+  const a = geminiQueue.shift() ?? geminiAnswer;
+  return new Response(JSON.stringify(a.body), { status: a.status });
 }
 function answer(rows: unknown[]) {
   geminiAnswer = {
@@ -63,6 +66,7 @@ beforeEach(async () => {
   await resetDb();
   process.env.GEMINI_API_KEY = "test-gemini-key";
   geminiCalls.length = 0;
+  geminiQueue.length = 0;
   admin = { id: (await createUser({ role: "ADMIN" })).id, role: "ADMIN" };
   mod = { id: (await createUser({ role: "MODERATOR" })).id, role: "MODERATOR" };
 });
@@ -150,6 +154,20 @@ describe("reading result screenshots", () => {
       code: "UNAVAILABLE",
       message: expect.stringContaining("limit is used up"),
     });
+  });
+
+  it("falls back to the next model when one is busy", async () => {
+    const { m, players } = await brMatch();
+    geminiQueue.push({ status: 503, body: { error: { status: "UNAVAILABLE" } } });
+    answer([{ name: "khushi", placement: 1, kills: 2 }]);
+    const out = await readResultScreenshots(mod, { matchId: m.id }, [PNG]);
+    expect(out.suggestions).toEqual([
+      expect.objectContaining({ registrationId: players[1]!.regId, placement: 1, kills: 2 }),
+    ]);
+    expect(geminiCalls.map((c) => c.url.match(/models\/([^:]+)/)![1])).toEqual([
+      "gemini-flash-lite-latest",
+      "gemini-3.5-flash",
+    ]);
   });
 
   it("marks the winner of a head-to-head match", async () => {
