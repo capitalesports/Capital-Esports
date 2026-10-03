@@ -570,3 +570,13 @@ At the owner's request, to save the daily email quota (Resend free plan: about 1
 - **Results are in** (`RESULTS_APPROVED`)
 
 The 30-minute reminder email now says that the room ID and password are on the match page and dashboard. Slot confirmations, the reminder, cancellations, prizes and the other events are still emailed (`EMAIL_EVENTS` in `lib/notifications.ts`).
+
+### M47 Emails only for slot, reminder and cancellation
+At the owner's request, emails go out for three things only (`EMAIL_EVENTS`):
+- the slot is confirmed (`REGISTRATION_CONFIRMED`, and `WAITLIST_PROMOTED` when a waitlisted player gets a slot);
+- the match starts in 30 minutes (`MATCH_STARTING_SOON`);
+- the match is cancelled (`MATCH_CANCELLED`).
+
+Everything else is in the bell (and push, if turned on) only: prizes won, room ready, results, result submission, disputes, payouts, team and roster invites, lobbies, removals and announcements. This replaces M46 and the prize email of M28.
+
+Account emails (sign-up and email-verification codes, login codes) are not notifications and are unchanged. A player in one match costs about 2 emails, so the free plan's ~100 a day covers about 45 players.
