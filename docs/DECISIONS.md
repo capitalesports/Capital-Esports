@@ -599,3 +599,8 @@ At the owner's request, players no longer submit their own results. Staff upload
   - Screenshots go to Google for reading. They contain only in-game names and scores.
   - Without a key, or when the free quota is used up, the button says so and results are typed in by hand.
 - **Players:** `PLAYERS_SUBMIT_RESULTS = false` (`lib/results-config.ts`) hides the player "Submit result" form and stops the "Submit your result" notice. The code stays, so setting it to true brings both back.
+
+### M49 Editing an open scrim never fails on "slots already filled"
+Editing **Solo Rush** (Free Fire 1v1, 4 confirmed players) failed with "4 slots are already filled". In an open-entry scrim, `maxSlots` is the size of one lobby: 1v1 → 2. Extra entries are split into more lobbies at close (M-lobbies). So the confirmed count is not capped by it.
+
+`updateMatch` now checks `maxSlots` against confirmed entries only for capped matches: tournament matches, bracket rounds and entry lists.

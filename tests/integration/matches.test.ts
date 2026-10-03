@@ -471,6 +471,24 @@ describe("tournament links, cloning limits and locked fields", () => {
     }
   });
 
+  it("edits an open-entry scrim with more entries than one lobby holds (DECISIONS M49)", async () => {
+    // A Free Fire 1v1 scrim: 2 per lobby, but 4 confirmed players (two lobbies at close).
+    const oneVone = { ...form(), game: "FREE_FIRE", mode: "ONE_V_ONE", title: "Solo Rush" };
+    const m = await createMatch(admin, oneVone);
+    for (let i = 0; i < 4; i++) {
+      await testDb().registration.create({
+        data: {
+          matchId: m.id,
+          userId: (await createUser()).id,
+          status: "CONFIRMED",
+          position: i + 1,
+        },
+      });
+    }
+    const ok = await updateMatch(admin, m.id, { ...oneVone, title: "Solo Rush (edited)" });
+    expect(ok.title).toBe("Solo Rush (edited)");
+  });
+
   it("locks game, mode and kind once anyone registered", async () => {
     const m = await createMatch(admin, form());
     await testDb().registration.create({

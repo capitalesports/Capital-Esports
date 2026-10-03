@@ -26,6 +26,7 @@ import {
 import { assertAdmin, assertModerator, type Actor } from "@/lib/roles";
 import { roomNeedsPassword } from "@/lib/room-rules";
 import { addDays } from "@/lib/time";
+import { isOpenEntry } from "@/lib/lobbies";
 import { releaseUnplaced, sendLobbyNotices, splitIntoLobbies } from "./lobbies";
 import { applyTransition } from "./match-status";
 import { notify } from "./notify";
@@ -113,8 +114,16 @@ export async function updateMatch(actor: Actor | null, matchId: string, input: u
         );
       }
     }
+    // Open-entry scrims have no cap: maxSlots is the size of one lobby, and extra entries are split
+    // into more lobbies when registration closes (DECISIONS M49). Only capped matches check it.
+    const openEntry = isOpenEntry({
+      isEntryList: before.isEntryList,
+      tournamentId: data.tournamentId ?? null,
+      bracketRound: before.bracketRound,
+      parentMatchId: before.parentMatchId,
+    });
     const taken = await tx.registration.count({ where: { matchId, status: "CONFIRMED" } });
-    if (data.maxSlots < taken) {
+    if (!openEntry && data.maxSlots < taken) {
       throw new AppError("VALIDATION", `${taken} slots are already filled.`, {
         maxSlots: [`At least ${taken} (already filled)`],
       });
