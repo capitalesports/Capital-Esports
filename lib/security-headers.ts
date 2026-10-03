@@ -1,7 +1,7 @@
 /**
  * Content-Security-Policy for pages. Scripts need the per-request nonce (plus 'strict-dynamic' so
  * Firebase's reCAPTCHA and Cashfree's checkout SDK, loaded by our bundled code, are allowed).
- * Host allow-lists cover only Firebase/Google auth, Cashfree, YouTube embeds, Supabase storage and Sentry.
+ * Host allow-lists cover only Firebase/Google auth, Cashfree, Razorpay, YouTube embeds, Supabase storage and Sentry.
  */
 export const FIREBASE_HOSTS = [
   "https://www.google.com",
@@ -11,6 +11,8 @@ export const FIREBASE_HOSTS = [
   "https://*.firebaseapp.com",
 ];
 export const CASHFREE_HOSTS = ["https://sdk.cashfree.com", "https://*.cashfree.com"];
+/** Razorpay Checkout: script, API, popup frames and its bank/UPI redirects (DECISIONS M43). */
+export const RAZORPAY_HOSTS = ["https://checkout.razorpay.com", "https://*.razorpay.com"];
 export const SUPABASE_HOSTS = ["https://*.supabase.co"];
 export const SENTRY_HOSTS = [
   "https://*.ingest.sentry.io",
@@ -28,6 +30,7 @@ export function buildCsp(nonce: string, isDev: boolean): string {
       "'strict-dynamic'",
       ...FIREBASE_HOSTS,
       ...CASHFREE_HOSTS,
+      ...RAZORPAY_HOSTS,
       ...(isDev ? ["'unsafe-eval'"] : []),
     ],
     // Inline style attributes (carousel transforms, toasts) need 'unsafe-inline'; scripts do not.
@@ -38,6 +41,7 @@ export function buildCsp(nonce: string, isDev: boolean): string {
       "'self'",
       ...FIREBASE_HOSTS,
       ...CASHFREE_HOSTS,
+      ...RAZORPAY_HOSTS,
       ...SUPABASE_HOSTS,
       ...SENTRY_HOSTS,
     ],
@@ -45,13 +49,14 @@ export function buildCsp(nonce: string, isDev: boolean): string {
       "https://www.google.com",
       "https://*.firebaseapp.com",
       ...CASHFREE_HOSTS,
+      ...RAZORPAY_HOSTS,
       YOUTUBE_EMBED,
     ],
     "worker-src": ["'self'"],
     "manifest-src": ["'self'"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
-    "form-action": ["'self'", ...CASHFREE_HOSTS],
+    "form-action": ["'self'", ...CASHFREE_HOSTS, ...RAZORPAY_HOSTS],
     "frame-ancestors": ["'none'"],
   };
   const parts = Object.entries(directives).map(([k, v]) => `${k} ${v.join(" ")}`);
@@ -67,6 +72,7 @@ export const SECURITY_HEADERS: { key: string; value: string }[] = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://*.cashfree.com")',
+    value:
+      'camera=(), microphone=(), geolocation=(), payment=(self "https://*.cashfree.com" "https://*.razorpay.com")',
   },
 ];

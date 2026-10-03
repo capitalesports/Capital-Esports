@@ -55,6 +55,25 @@ export function paymentsEnabled(): boolean {
   return process.env.PAYMENTS_ENABLED === "true";
 }
 
+/** Razorpay Checkout (DECISIONS M43). Takes precedence over Cashfree when both are set. */
+export function razorpayConfig(): {
+  keyId: string;
+  keySecret: string;
+  webhookSecret: string;
+} | null {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) return null;
+  return { keyId, keySecret, webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ?? "" };
+}
+
+/** Which gateway takes entry fees: Razorpay, Cashfree, or the local stub (dev/test only). */
+export function paymentProvider(): "razorpay" | "cashfree" | "stub" {
+  if (razorpayConfig()) return "razorpay";
+  if (cashfreePgConfig()) return "cashfree";
+  return "stub";
+}
+
 export function cashfreeEnv(): "sandbox" | "production" {
   return process.env.CASHFREE_ENV === "production" ? "production" : "sandbox";
 }

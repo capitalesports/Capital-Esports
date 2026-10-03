@@ -1,7 +1,7 @@
 import "server-only";
 import type { RegistrationPanelState } from "@/components/match/registration-panel";
 import type { SessionUser } from "@/server/auth/session";
-import { paymentsEnabled } from "@/server/env";
+import { paymentProvider, paymentsEnabled } from "@/server/env";
 import { isTeamMode, playersPerSlot } from "@/lib/match-schema";
 import { isOpenEntry } from "@/lib/lobbies";
 import {
@@ -23,9 +23,11 @@ async function pendingPayment(registrationId: string, status: string) {
   return p ? { amountPaise: p.amountPaise, expiresAt: p.expiresAt.toISOString() } : null;
 }
 
-/** Which checkout the client opens: Cashfree sandbox/production, or the local test checkout. */
-export function checkoutMode(): "sandbox" | "production" | "stub" {
-  if (!process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY) return "stub";
+/** Which checkout the client opens: Razorpay, Cashfree sandbox/production, or the local test checkout. */
+export function checkoutMode(): "sandbox" | "production" | "razorpay" | "stub" {
+  const provider = paymentProvider();
+  if (provider === "razorpay") return "razorpay";
+  if (provider === "stub") return "stub";
   return process.env.CASHFREE_ENV === "production" ? "production" : "sandbox";
 }
 

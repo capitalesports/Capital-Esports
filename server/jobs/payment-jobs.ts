@@ -3,7 +3,7 @@ import { db } from "@/server/db";
 import { getPaymentGateway } from "@/server/providers/payment-gateway";
 import { getPayoutGateway } from "@/server/providers/payout-gateway";
 import { mapTransferStatus } from "@/lib/payments";
-import { applyPaymentEvent, applyRefundEvent, executeRefunds } from "@/server/services/payments";
+import { applyRefundEvent, executeRefunds, recoverPaidOrder } from "@/server/services/payments";
 import { applyTransferEvent } from "@/server/services/payouts";
 import { lockMatch, promoteWaitlist } from "@/server/services/registration";
 
@@ -18,15 +18,13 @@ export async function runPaymentExpiryJob(now = new Date()) {
     include: { match: { select: { id: true } } },
     take: 200,
   });
-  const gateway = getPaymentGateway();
   let expired = 0;
   let recovered = 0;
   for (const p of due) {
     const reg = await db.registration.findUnique({ where: { id: p.registrationId } });
     if (!reg || reg.status !== "PENDING_PAYMENT") continue;
     try {
-      if ((await gateway.fetchOrderStatus(p.orderId)) === "PAID") {
-        await applyPaymentEvent(p.orderId, "SUCCESS", { source: "expiry-recheck" });
+      if (await recoverPaidOrder(p)) {
         recovered++;
         continue;
       }
@@ -67,10 +65,8 @@ export async function runReconciliationJob(now = new Date()) {
     where: { status: "CREATED", createdAt: { gte: since }, sessionId: { not: null } },
   });
   for (const p of open) {
-    const theirs = await pg.fetchOrderStatus(p.orderId).catch(() => "UNREACHABLE");
-    if (theirs === "PAID") {
-      flags.push({ kind: "payment", entityId: p.id, ours: p.status, theirs });
-      await applyPaymentEvent(p.orderId, "SUCCESS", { source: "reconciliation" });
+    if (await recoverPaidOrder(p).catch(() => false)) {
+      flags.push({ kind: "payment", entityId: p.id, ours: p.status, theirs: "PAID" });
     }
   }
 
@@ -78,7 +74,9 @@ export async function runReconciliationJob(now = new Date()) {
     where: { status: "REFUND_PENDING", refundId: { not: null } },
   });
   for (const p of refunds) {
-    const theirs = await pg.fetchRefundStatus(p.orderId, p.refundId!).catch(() => "NOT_FOUND");
+    const theirs = await pg
+      .fetchRefundStatus({ ...p, providerPaymentId: p.cfPaymentId, refundId: p.refundId! })
+      .catch(() => "NOT_FOUND");
     if (theirs === "SUCCESS") {
       flags.push({ kind: "refund", entityId: p.id, ours: p.status, theirs });
       await applyRefundEvent(p.refundId!, "SUCCESS", { raw: { source: "reconciliation" } });

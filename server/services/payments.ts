@@ -6,7 +6,11 @@ import { writeAudit } from "@/server/audit";
 import { db, type Tx } from "@/server/db";
 import { siteUrlServer } from "@/server/env";
 import { AppError } from "@/server/errors";
-import { getPaymentGateway } from "@/server/providers/payment-gateway";
+import {
+  getPaymentGateway,
+  getRazorpayGateway,
+  RazorpayPaymentGateway,
+} from "@/server/providers/payment-gateway";
 import { parseInput } from "@/server/validation";
 import {
   nextPaymentStatus,
@@ -16,6 +20,8 @@ import {
   type RefundEvent,
 } from "@/lib/payments";
 import { isOpenEntry } from "@/lib/lobbies";
+import { verifyRazorpayCheckoutSignature } from "@/lib/razorpay-signature";
+import { SITE_NAME } from "@/lib/site";
 import { PHONE_FOR_MONEY_MESSAGE, PHONE_ITEM } from "@/lib/profile";
 import { assertUser, type Actor } from "@/lib/roles";
 import { addMinutes } from "@/lib/time";
@@ -58,15 +64,20 @@ export async function enterPendingPayment(
 }
 
 /**
- * Open (or resume) checkout for my PENDING_PAYMENT registration. Creates the Cashfree order once
- * and returns its payment_session_id; a failed/abandoned attempt within the window gets a new order.
+ * Open (or resume) checkout for my PENDING_PAYMENT registration. Creates the provider's order once
+ * (Cashfree payment_session_id or Razorpay order id, kept in Payment.sessionId) for the amount on our
+ * Payment row; a failed/abandoned attempt within the window gets a new order. The browser never
+ * sends an amount (DECISIONS M43).
  */
 export async function startCheckout(actor: Actor | null, input: unknown, now = new Date()) {
   const me = assertUser(actor);
   const { matchId } = parseInput(z.object({ matchId: z.string().min(1) }), input);
   const reg = await db.registration.findUnique({
     where: { matchId_userId: { matchId, userId: me.id } },
-    include: { user: { select: { phone: true } } },
+    include: {
+      user: { select: { phone: true, email: true, displayName: true } },
+      match: { select: { title: true } },
+    },
   });
   if (!reg || reg.status !== "PENDING_PAYMENT")
     throw new AppError("NOT_FOUND", "There is no payment waiting for you in this match.");
@@ -83,12 +94,12 @@ export async function startCheckout(actor: Actor | null, input: unknown, now = n
       data: { status: "CREATED", orderId: newOrderId(), sessionId: null },
     });
   }
+  const gateway = getPaymentGateway();
   if (!payment.sessionId) {
     // Cashfree needs the payer's mobile number; Google sign-ups may not have one (DECISIONS M31).
-    if (!reg.user.phone) {
+    if (gateway.requiresPhone && !reg.user.phone) {
       throw new AppError("PROFILE_INCOMPLETE", PHONE_FOR_MONEY_MESSAGE, { missing: [PHONE_ITEM] });
     }
-    const gateway = getPaymentGateway();
     const site = siteUrlServer();
     const { paymentSessionId } = await gateway.createOrder({
       orderId: payment.orderId,
@@ -108,7 +119,87 @@ export async function startCheckout(actor: Actor | null, input: unknown, now = n
     orderId: payment.orderId,
     paymentSessionId: payment.sessionId!,
     expiresAt: payment.expiresAt.toISOString(),
+    // What Razorpay's popup shows. The amount is fixed by the order; the popup can't change it.
+    razorpay:
+      gateway instanceof RazorpayPaymentGateway
+        ? {
+            keyId: gateway.keyId,
+            orderId: payment.sessionId!,
+            amountPaise: payment.amountPaise,
+            name: SITE_NAME,
+            description: `Entry fee: ${reg.match.title}`.slice(0, 250),
+            prefill: { name: reg.user.displayName ?? "", email: reg.user.email ?? "" },
+          }
+        : null,
   };
+}
+
+const razorpayConfirmSchema = z.object({
+  razorpay_order_id: z.string().min(1).max(100),
+  razorpay_payment_id: z.string().min(1).max(100),
+  razorpay_signature: z.string().min(1).max(200),
+});
+
+/**
+ * Razorpay's popup calls back with { order, payment, signature }. We verify the signature with our
+ * key secret, then re-read the payment from Razorpay and check it belongs to this order, is for the
+ * exact amount on our Payment row and is captured (capturing it if only authorized). Only then does
+ * the slot confirm, through the same idempotent path as the webhook (DECISIONS M43).
+ */
+export async function confirmRazorpayPayment(actor: Actor | null, input: unknown) {
+  const me = assertUser(actor);
+  const v = parseInput(razorpayConfirmSchema, input);
+  const gateway = getRazorpayGateway();
+  if (!gateway) throw new AppError("UNAVAILABLE", "Payments are not configured.");
+  const payment = await db.payment.findFirst({ where: { sessionId: v.razorpay_order_id } });
+  if (!payment || payment.userId !== me.id) throw new AppError("NOT_FOUND", "Order not found.");
+  const unverified = new AppError(
+    "VALIDATION",
+    "We couldn't verify this payment. If money was taken, it will be confirmed or refunded automatically.",
+  );
+  if (
+    !verifyRazorpayCheckoutSignature(
+      gateway.keySecret,
+      v.razorpay_order_id,
+      v.razorpay_payment_id,
+      v.razorpay_signature,
+    )
+  ) {
+    throw unverified;
+  }
+  const result = await settleRazorpayPayment(gateway, payment, v.razorpay_payment_id, "checkout");
+  if (result === "MISMATCH") throw unverified;
+  return { orderId: payment.orderId, result };
+}
+
+/**
+ * Re-read a Razorpay payment and apply it to our Payment row if it really is this order's money:
+ * same order, same amount in INR. An authorized payment is captured first. Shared by the checkout
+ * callback and the webhook. Returns "MISMATCH" for anything that doesn't add up.
+ */
+export async function settleRazorpayPayment(
+  gateway: RazorpayPaymentGateway,
+  payment: { orderId: string; sessionId: string | null; amountPaise: number },
+  razorpayPaymentId: string,
+  source: "checkout" | "webhook" | "recovery",
+): Promise<PaymentOutcome | "MISMATCH" | "PENDING"> {
+  let p = await gateway.fetchPayment(razorpayPaymentId);
+  if (
+    p.order_id !== payment.sessionId ||
+    p.amount !== payment.amountPaise ||
+    p.currency !== "INR"
+  ) {
+    console.error("Razorpay payment does not match the order", payment.orderId, razorpayPaymentId);
+    return "MISMATCH";
+  }
+  if (p.status === "authorized") p = await gateway.capture(p.id, payment.amountPaise);
+  if (p.status !== "captured") return "PENDING";
+  return applyPaymentEvent(
+    payment.orderId,
+    "SUCCESS",
+    { source: `razorpay-${source}`, payment: p },
+    p.id,
+  );
 }
 
 async function lockMatchRow(tx: Tx, matchId: string) {
@@ -150,6 +241,8 @@ export async function executeRefunds(
   payments: {
     id: string;
     orderId: string;
+    sessionId: string | null;
+    cfPaymentId: string | null;
     refundId: string | null;
     amountPaise: number;
     refundReason: string | null;
@@ -161,6 +254,8 @@ export async function executeRefunds(
     try {
       const { status } = await gateway.refund({
         orderId: p.orderId,
+        sessionId: p.sessionId,
+        providerPaymentId: p.cfPaymentId,
         refundId: p.refundId,
         amountPaise: p.amountPaise,
         note: p.refundReason ?? "Refund",
@@ -248,6 +343,28 @@ export async function applyPaymentEvent(
   if (toRefund) await executeRefunds([toRefund]);
   await Promise.all(events.map(notify));
   return outcome;
+}
+
+/**
+ * Jobs: did the provider take money for this order although no webhook reached us? Razorpay payments
+ * are settled with their payment id (needed for refunds); Cashfree by order status. True if applied.
+ */
+export async function recoverPaidOrder(p: {
+  orderId: string;
+  sessionId: string | null;
+  amountPaise: number;
+}): Promise<boolean> {
+  const gateway = getPaymentGateway();
+  if (gateway instanceof RazorpayPaymentGateway) {
+    if (!p.sessionId) return false;
+    const paymentId = await gateway.findOrderPayment(p.sessionId);
+    if (!paymentId) return false;
+    const r = await settleRazorpayPayment(gateway, p, paymentId, "recovery");
+    return r !== "MISMATCH" && r !== "PENDING";
+  }
+  if ((await gateway.fetchOrderStatus(p)) !== "PAID") return false;
+  await applyPaymentEvent(p.orderId, "SUCCESS", { source: "recovery" });
+  return true;
 }
 
 /** Apply a verified refund webhook (REFUND_PENDING -> REFUNDED). Idempotent. */

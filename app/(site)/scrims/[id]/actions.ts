@@ -10,7 +10,7 @@ import {
   respondToRoster,
 } from "@/server/services/registration";
 import { submitResult } from "@/server/services/results";
-import { startCheckout } from "@/server/services/payments";
+import { confirmRazorpayPayment, startCheckout } from "@/server/services/payments";
 
 function refresh(matchId: string) {
   revalidatePath(`/scrims/${matchId}`);
@@ -77,4 +77,13 @@ export async function submitResultAction(form: FormData) {
 
 export async function startCheckoutAction(input: { matchId: string }) {
   return runAction(async () => startCheckout(await requireUser(), input));
+}
+
+/** Razorpay popup callback: the server verifies the signature and re-reads the payment (M43). */
+export async function confirmRazorpayPaymentAction(input: {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}) {
+  return runAction(async () => confirmRazorpayPayment(await requireUser(), input));
 }

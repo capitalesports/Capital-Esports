@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { RegistrationStatus } from "@/generated/prisma/client";
 import { db, type Tx } from "@/server/db";
-import { paymentsEnabled } from "@/server/env";
+import { paymentProvider, paymentsEnabled } from "@/server/env";
 import { AppError } from "@/server/errors";
 import { catchUpMatchStatuses } from "@/server/jobs/status-catch-up";
 import { enforceRateLimit } from "@/server/rate-limit";
@@ -290,8 +290,8 @@ export async function registerForMatch(
         { missing },
       );
     }
-    // Paid entry goes through Cashfree, which needs a mobile number (DECISIONS M31).
-    if (match.entryFeePaise > 0 && !user.phone) {
+    // Cashfree needs the payer's mobile number (DECISIONS M31); Razorpay doesn't (M43).
+    if (match.entryFeePaise > 0 && !user.phone && paymentProvider() === "cashfree") {
       throw new AppError("PROFILE_INCOMPLETE", PHONE_FOR_MONEY_MESSAGE, { missing: [PHONE_ITEM] });
     }
     const block = registrationBlock(user, match, now, paymentsEnabled());

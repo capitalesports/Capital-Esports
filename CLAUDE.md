@@ -10,7 +10,7 @@ Production esports site for India (Free Fire, BGMI, Valorant). **docs/SPEC.md is
 - Prisma 7 + PostgreSQL via `@prisma/adapter-pg`; generated client in `generated/prisma` (gitignored, `prisma generate` on postinstall)
 - Firebase Phone Auth on the client for OTP only; our own session = signed JWT (jose, HS256) in an httpOnly cookie
 - Zod for all input validation; server actions or route handlers for mutations
-- Cashfree PG + Payouts (Phase 6); Web Push via VAPID (Phase 7)
+- Razorpay Checkout for entry fees (DECISIONS M43; Cashfree PG + Payouts remain as an alternative); Web Push via VAPID (Phase 7)
 - Vitest (unit + DB integration), Playwright (e2e, mobile viewport)
 - Vercel hosting + Vercel Cron
 

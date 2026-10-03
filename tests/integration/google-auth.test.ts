@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { GoogleProfile } from "@/server/auth/google-verifier";
 import { loginWithVerifiedPhone } from "@/server/services/auth";
 import { banUser } from "@/server/services/admin-users";
-import { attachGoogleProfile, loginWithGoogle, nameFromGoogle } from "@/server/services/google-auth";
+import {
+  attachGoogleProfile,
+  loginWithGoogle,
+  nameFromGoogle,
+} from "@/server/services/google-auth";
 import { approvePayout, revealPayoutUpi, savePayoutMethod } from "@/server/services/payouts";
 import { registerForMatch } from "@/server/services/registration";
 import { createMatch, createUser, resetDb, testDb } from "../helpers/db";
@@ -59,12 +63,16 @@ describe("Continue with Google (DECISIONS M29, M31)", () => {
     const out = await loginWithGoogle(google({ sub: "g-b", email: "banned@gmail.com" }));
     const admin = { id: (await createUser({ role: "ADMIN" })).id, role: "ADMIN" as const };
     await banUser(admin, { userId: out.id, reason: "Cheating in lobby" });
-    await expect(loginWithGoogle(google({ sub: "g-b", email: "banned@gmail.com" }))).rejects.toMatchObject({
+    await expect(
+      loginWithGoogle(google({ sub: "g-b", email: "banned@gmail.com" })),
+    ).rejects.toMatchObject({
       code: "BANNED",
     });
     // Even with a fresh Google id (account deleted/merged), the banned email is refused.
     await testDb().user.update({ where: { id: out.id }, data: { googleId: null, email: null } });
-    await expect(loginWithGoogle(google({ sub: "g-new", email: "banned@gmail.com" }))).rejects.toMatchObject({
+    await expect(
+      loginWithGoogle(google({ sub: "g-new", email: "banned@gmail.com" })),
+    ).rejects.toMatchObject({
       code: "BANNED",
     });
   });
@@ -84,35 +92,49 @@ describe("Continue with Google (DECISIONS M29, M31)", () => {
     expect(method.beneficiaryId.startsWith("unregistered_")).toBe(true);
 
     const adminId = (await createUser({ role: "ADMIN" })).id;
-    const payout = await testDb().payout.create({ data: { userId: out.id, place: 1, amountPaise: 10_000 } });
-    await expect(approvePayout({ id: adminId, role: "ADMIN" }, { payoutId: payout.id })).rejects.toMatchObject({
+    const payout = await testDb().payout.create({
+      data: { userId: out.id, place: 1, amountPaise: 10_000 },
+    });
+    await expect(
+      approvePayout({ id: adminId, role: "ADMIN" }, { payoutId: payout.id }),
+    ).rejects.toMatchObject({
       code: "CONFLICT",
       message: expect.stringContaining("isn't registered with Cashfree"),
     });
     // Paying by hand still works.
-    expect(await revealPayoutUpi({ id: adminId, role: "ADMIN" }, { payoutId: payout.id })).toMatchObject({
+    expect(
+      await revealPayoutUpi({ id: adminId, role: "ADMIN" }, { payoutId: payout.id }),
+    ).toMatchObject({
       vpa: "payer@okaxis",
     });
   });
 
-  it("asks for a mobile number before paid entry, not before free matches", async () => {
-    const out = await loginWithGoogle(google({ sub: "g-reg", email: "reg@gmail.com" }));
-    await testDb().user.update({
-      where: { id: out.id },
-      data: { dateOfBirth: new Date("2000-01-01T00:00:00Z") },
-    });
-    await testDb().gameProfile.create({
-      data: { userId: out.id, game: "BGMI", gameId: "5123400001", ign: "Googler" },
-    });
-    const admin = (await createUser({ role: "ADMIN" })).id;
-    const me = { id: out.id, role: "PLAYER" as const };
-    const free = await createMatch(admin, { game: "BGMI" });
-    expect((await registerForMatch(me, { matchId: free.id })).status).toBe("CONFIRMED");
-    const paid = await createMatch(admin, { game: "BGMI", entryFeePaise: 5000 });
-    await expect(registerForMatch(me, { matchId: paid.id })).rejects.toMatchObject({
-      code: "PROFILE_INCOMPLETE",
-      fieldErrors: { missing: ["mobile number"] },
-    });
+  it("with Cashfree, asks for a mobile number before paid entry, not before free matches", async () => {
+    // Only Cashfree needs the payer's phone; Razorpay doesn't (DECISIONS M43).
+    process.env.CASHFREE_APP_ID = "cf_app";
+    process.env.CASHFREE_SECRET_KEY = "cf_secret";
+    try {
+      const out = await loginWithGoogle(google({ sub: "g-reg", email: "reg@gmail.com" }));
+      await testDb().user.update({
+        where: { id: out.id },
+        data: { dateOfBirth: new Date("2000-01-01T00:00:00Z") },
+      });
+      await testDb().gameProfile.create({
+        data: { userId: out.id, game: "BGMI", gameId: "5123400001", ign: "Googler" },
+      });
+      const admin = (await createUser({ role: "ADMIN" })).id;
+      const me = { id: out.id, role: "PLAYER" as const };
+      const free = await createMatch(admin, { game: "BGMI" });
+      expect((await registerForMatch(me, { matchId: free.id })).status).toBe("CONFIRMED");
+      const paid = await createMatch(admin, { game: "BGMI", entryFeePaise: 5000 });
+      await expect(registerForMatch(me, { matchId: paid.id })).rejects.toMatchObject({
+        code: "PROFILE_INCOMPLETE",
+        fieldErrors: { missing: ["mobile number"] },
+      });
+    } finally {
+      delete process.env.CASHFREE_APP_ID;
+      delete process.env.CASHFREE_SECRET_KEY;
+    }
   });
 
   it("uses the Google name only when it is a valid display name", () => {

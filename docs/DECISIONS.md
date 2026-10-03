@@ -524,3 +524,27 @@ At the owner's request, a paid entry fee is refunded only when **we** cancel the
 - An unpaid checkout attempt is still marked `FAILED`.
 - On a paid match, the cancel confirmation says the fee is not refunded.
 - The Refund policy and rule 11 on the Rules page say the same.
+
+### M43 Razorpay Checkout for entry fees
+At the owner's request, entry fees can be taken through Razorpay. Cashfree is no longer the only option.
+- **Choosing the provider:**
+  - `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` set → Razorpay. They win over Cashfree if both are set.
+  - Otherwise Cashfree, otherwise the local stub (dev/test only).
+  - Paid matches still need `PAYMENTS_ENABLED=true`.
+- **The amount can't be changed by the player.**
+  - The server creates the Razorpay order from our `Payment.amountPaise`, which is the match's entry fee. The order id is kept in `Payment.sessionId`; our order id goes in Razorpay's `receipt`.
+  - The browser only opens Razorpay's popup for that order. The player never types an amount.
+- **A payment counts only after checks.**
+  - The popup's callback (`confirmRazorpayPaymentAction`) is verified with the key secret (HMAC of `order|payment`).
+  - We then re-read the payment from Razorpay: same order, exact amount, INR, captured. An authorized payment is captured first.
+  - Only then does `applyPaymentEvent` confirm the slot. A mismatch is refused and flagged.
+- **Webhook:** `/api/webhooks/razorpay` checks `X-Razorpay-Signature` against `RAZORPAY_WEBHOOK_SECRET`.
+  - `payment.authorized`, `payment.captured` and `order.paid` are settled the same way.
+  - `refund.*` events close refunds.
+  - `payment.failed` is only acknowledged, because a Razorpay order stays open for another attempt.
+  - Money for an order we no longer know is recorded as a ReconciliationFlag for a manual refund.
+- **Refunds** (only when we cancel; M42) go to `POST /payments/:id/refund` with our refund id as `receipt`. The existing refunds are listed first, so a retry never refunds twice.
+- **Missed callbacks:** the payment-expiry and nightly reconciliation jobs look up the order's payments (`recoverPaidOrder`). A paid order is settled with its Razorpay payment id, which refunds need.
+- **No phone needed:** Razorpay doesn't ask for the payer's mobile number, so the paid-entry phone check now applies only to Cashfree.
+- CSP and Permissions-Policy allow `checkout.razorpay.com` and `*.razorpay.com`. The checkout script loads only when a player pays.
+- Prizes are still paid by hand. RazorpayX Payouts needs a current account and is not built.

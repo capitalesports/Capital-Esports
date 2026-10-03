@@ -26,7 +26,9 @@ const PUBLIC_ACTIONS: Record<string, string> = {
 };
 
 describe("every server action checks the caller", () => {
-  const files = walk(path.join(ROOT, "app"), (n) => n === "actions.ts").filter((f) => readFileSync(f, "utf8").startsWith('"use server"'));
+  const files = walk(path.join(ROOT, "app"), (n) => n === "actions.ts").filter((f) =>
+    readFileSync(f, "utf8").startsWith('"use server"'),
+  );
 
   it("finds the action files", () => {
     expect(files.length).toBeGreaterThanOrEqual(12);
@@ -76,15 +78,22 @@ const ROUTE_MUTATIONS: Record<string, string> = {
     "hashed one-time code (10 min, 5 tries, single use) proves the email, same-origin check, IP rate limit, ban checks",
   "app/api/auth/logout/route.ts": "same-origin check; only clears the caller's cookie",
   "app/api/webhooks/cashfree/route.ts": "HMAC signature mandatory",
+  "app/api/webhooks/razorpay/route.ts":
+    "HMAC signature mandatory; payments re-read from Razorpay and checked against our order and amount",
   "app/api/webhooks/cashfree-payouts/route.ts": "HMAC signature mandatory",
-  "app/api/analytics/route.ts": "anonymous page-view beacon, path validated, rate-limited, stores no PII",
+  "app/api/analytics/route.ts":
+    "anonymous page-view beacon, path validated, rate-limited, stores no PII",
 };
 
 describe("route handlers", () => {
   const routes = walk(path.join(ROOT, "app"), (n) => n === "route.ts" || n === "route.tsx");
 
   it("every POST/PUT/PATCH/DELETE handler is reviewed", () => {
-    const mutating = routes.filter((f) => /export async function (POST|PUT|PATCH|DELETE)\b/.test(readFileSync(f, "utf8"))).map(rel);
+    const mutating = routes
+      .filter((f) =>
+        /export async function (POST|PUT|PATCH|DELETE)\b/.test(readFileSync(f, "utf8")),
+      )
+      .map(rel);
     expect(mutating.sort()).toEqual(Object.keys(ROUTE_MUTATIONS).sort());
   });
 
@@ -115,13 +124,18 @@ describe("route handlers", () => {
 
 describe("secrets stay on the server", () => {
   it("client components only read NEXT_PUBLIC_ env vars", () => {
-    const clientFiles = [...walk(path.join(ROOT, "components"), (n) => /\.tsx?$/.test(n)), ...walk(path.join(ROOT, "app"), (n) => /\.tsx?$/.test(n))].filter((f) =>
-      readFileSync(f, "utf8").startsWith('"use client"'),
-    );
+    const clientFiles = [
+      ...walk(path.join(ROOT, "components"), (n) => /\.tsx?$/.test(n)),
+      ...walk(path.join(ROOT, "app"), (n) => /\.tsx?$/.test(n)),
+    ].filter((f) => readFileSync(f, "utf8").startsWith('"use client"'));
     expect(clientFiles.length).toBeGreaterThan(20);
     for (const f of clientFiles) {
       const envs = readFileSync(f, "utf8").match(/process\.env\.([A-Z_]+)/g) ?? [];
-      for (const e of envs) expect(e === "process.env.NODE_ENV" || e.startsWith("process.env.NEXT_PUBLIC_"), `${rel(f)} reads ${e}`).toBe(true);
+      for (const e of envs)
+        expect(
+          e === "process.env.NODE_ENV" || e.startsWith("process.env.NEXT_PUBLIC_"),
+          `${rel(f)} reads ${e}`,
+        ).toBe(true);
     }
   });
 
@@ -143,7 +157,10 @@ describe("security headers", () => {
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("upgrade-insecure-requests");
     const hosts = csp.match(/https:\/\/[^\s;]+/g) ?? [];
-    for (const h of hosts) expect(h, h).toMatch(/google\.com|gstatic\.com|googleapis\.com|firebaseapp\.com|cashfree\.com|supabase\.co|sentry\.io|youtube-nocookie\.com/);
+    for (const h of hosts)
+      expect(h, h).toMatch(
+        /google\.com|gstatic\.com|googleapis\.com|firebaseapp\.com|cashfree\.com|razorpay\.com|supabase\.co|sentry\.io|youtube-nocookie\.com/,
+      );
     expect(buildCsp("n", true)).toContain("'unsafe-eval'");
   });
 

@@ -1,11 +1,16 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
-import { getPaymentGateway } from "@/server/providers/payment-gateway";
+import {
+  getPaymentGateway,
+  getRazorpayGateway,
+  mapRazorpayRefundStatus,
+} from "@/server/providers/payment-gateway";
 import { getPayoutGateway } from "@/server/providers/payout-gateway";
 import type { PaymentEvent, RefundEvent } from "@/lib/payments";
+import { verifyRazorpayWebhookSignature } from "@/lib/razorpay-signature";
 import { verifyWebhookSignature } from "@/lib/webhook-signature";
-import { applyPaymentEvent, applyRefundEvent } from "./payments";
+import { applyPaymentEvent, applyRefundEvent, settleRazorpayPayment } from "./payments";
 import { applyTransferEvent } from "./payouts";
 
 export interface WebhookResult {
@@ -98,6 +103,89 @@ export async function handlePgWebhook(
   }
 
   // Other event types (e.g. settlements) are acknowledged and ignored.
+  return { status: 200, body: { ok: true, result: "IGNORED" } };
+}
+
+/**
+ * Razorpay webhook (DECISIONS M43). Signature (X-Razorpay-Signature, HMAC of the raw body with the
+ * webhook secret) is mandatory. Payment events are settled through settleRazorpayPayment, which
+ * re-reads the payment from Razorpay and checks order and amount; refund events close refunds.
+ * payment.failed is only acknowledged: a Razorpay order stays open for another attempt, and unpaid
+ * slots expire through the payment-expiry job.
+ */
+export async function handleRazorpayWebhook(
+  rawBody: string,
+  signature: string | null,
+  eventId: string | null,
+): Promise<WebhookResult> {
+  const gateway = getRazorpayGateway();
+  if (!gateway || !verifyRazorpayWebhookSignature(gateway.webhookSecret, rawBody, signature)) {
+    return { status: 401, body: { ok: false, error: "Invalid signature" } };
+  }
+  let payload: Json;
+  try {
+    payload = JSON.parse(rawBody) as Json;
+  } catch {
+    return { status: 400, body: { ok: false, error: "Invalid JSON" } };
+  }
+  const event = String(payload.event ?? "");
+  const entities = obj(payload.payload);
+
+  if (event === "payment.captured" || event === "payment.authorized" || event === "order.paid") {
+    const p = obj(obj(entities.payment).entity);
+    const rzpOrderId = String(p.order_id ?? "");
+    const rzpPaymentId = String(p.id ?? "");
+    if (!rzpOrderId || !rzpPaymentId)
+      return { status: 400, body: { ok: false, error: "Missing payment" } };
+    const payment = await db.payment.findFirst({ where: { sessionId: rzpOrderId } });
+    if (!payment) {
+      // Money for an order we no longer know (e.g. re-registered since): flag it for a manual refund.
+      await db.reconciliationFlag.create({
+        data: { kind: "payment", entityId: rzpPaymentId, ours: "UNKNOWN_ORDER", theirs: event },
+      });
+      return { status: 200, body: { ok: true, result: "FLAGGED" } };
+    }
+    const key = `razorpay:${event}:${eventId ?? rzpPaymentId}`;
+    if (!(await firstTime("razorpay", key, event)))
+      return { status: 200, body: { ok: true, result: "DUPLICATE" } };
+    try {
+      const result = await settleRazorpayPayment(gateway, payment, rzpPaymentId, "webhook");
+      if (result === "MISMATCH") {
+        await db.reconciliationFlag.create({
+          data: {
+            kind: "payment",
+            entityId: payment.id,
+            ours: payment.status,
+            theirs: "AMOUNT_OR_ORDER_MISMATCH",
+          },
+        });
+      }
+      return { status: 200, body: { ok: true, result } };
+    } catch (e) {
+      await forget(key); // let Razorpay retry
+      throw e;
+    }
+  }
+
+  if (event.startsWith("refund.")) {
+    const r = obj(obj(entities.refund).entity);
+    const refundId = String(r.receipt ?? "");
+    if (!refundId) return { status: 200, body: { ok: true, result: "IGNORED" } };
+    const status = mapRazorpayRefundStatus(String(r.status ?? "")) as RefundEvent;
+    const key = `razorpay:${event}:${eventId ?? String(r.id ?? refundId)}`;
+    if (!(await firstTime("razorpay", key, event)))
+      return { status: 200, body: { ok: true, result: "DUPLICATE" } };
+    try {
+      const known = await db.payment.findUnique({ where: { refundId }, select: { id: true } });
+      if (!known) return { status: 200, body: { ok: true, result: "IGNORED" } };
+      const result = await applyRefundEvent(refundId, status, { raw: payload });
+      return { status: 200, body: { ok: true, result } };
+    } catch (e) {
+      await forget(key);
+      throw e;
+    }
+  }
+
   return { status: 200, body: { ok: true, result: "IGNORED" } };
 }
 
