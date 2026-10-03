@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { runAction } from "@/server/action";
 import { requireAdmin } from "@/server/auth/guards";
+import { markRefundedManually } from "@/server/services/refunds";
 import {
   addSeasonPrize,
   approvePayout,
@@ -77,4 +78,11 @@ export async function resolveFlagAction(input: { flagId: string }) {
     await resolveReconciliationFlag(await requireAdmin(), input);
     revalidatePath("/admin/payouts");
   }, "Flag resolved");
+}
+
+export async function markRefundedManuallyAction(input: { paymentId: string; note?: string }) {
+  return runAction(async () => {
+    await markRefundedManually(await requireAdmin(), input);
+    revalidatePath("/admin/payouts");
+  }, "Marked as refunded");
 }

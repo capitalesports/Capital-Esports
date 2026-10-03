@@ -548,3 +548,13 @@ At the owner's request, entry fees can be taken through Razorpay. Cashfree is no
 - **No phone needed:** Razorpay doesn't ask for the payer's mobile number, so the paid-entry phone check now applies only to Cashfree.
 - CSP and Permissions-Policy allow `checkout.razorpay.com` and `*.razorpay.com`. The checkout script loads only when a player pays.
 - Prizes are still paid by hand. RazorpayX Payouts needs a current account and is not built.
+
+### M44 Entry-fee refunds can be made by hand
+The test account's Razorpay refund API refused every request, and the owner will make refunds by hand when needed.
+- Refunds are still sent to the provider automatically when we cancel a match. Failed refunds stay `REFUND_PENDING` and are retried nightly.
+- **Admin → Prizes → "Entry-fee refunds to make"** lists every pending refund with:
+  - the player, masked email and amount;
+  - the match and reason;
+  - the Razorpay payment ID, to search in the dashboard.
+- **Mark refunded** (optional note) closes a refund the admin made by hand: Razorpay dashboard "Issue Refund", or UPI. The payment becomes `REFUNDED`, the nightly retry stops, and `payment.refund.manual` is audited. Admins only.
+- **Never twice:** before creating a refund, the Razorpay gateway also checks the payment's `amount_refunded`. A refund made in the dashboard (which has no receipt from us) is treated as done, never sent again.

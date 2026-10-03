@@ -8,6 +8,7 @@ import {
   SettlePayoutControls,
   SyncLedgerButton,
 } from "@/components/admin/payout-controls";
+import { MarkRefundedButton } from "@/components/admin/refund-controls";
 import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,8 @@ import { toActor } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { payoutTwoStepThresholdPaise } from "@/server/env";
 import { isManualPayout, listPayoutLedger, payoutSources } from "@/server/services/payouts";
+import { listPendingRefunds } from "@/server/services/refunds";
+import { maskEmail } from "@/lib/contact-display";
 import { GAME_CONFIG } from "@/lib/games";
 import { formatINR } from "@/lib/money";
 import { isAdult, needsSecondApproval } from "@/lib/payments";
@@ -42,7 +45,7 @@ export default async function AdminPayoutsPage({ searchParams }: PageProps<"/adm
   const user = await requireStaffPage("/admin/payouts");
   const includeVoided = (await searchParams).voided === "1";
   const threshold = payoutTwoStepThresholdPaise();
-  const [ledger, seasons, flags] = await Promise.all([
+  const [ledger, seasons, flags, refunds] = await Promise.all([
     listPayoutLedger(toActor(user), { includeVoided }),
     db.season.findMany({
       where: { isActive: false },
@@ -55,6 +58,7 @@ export default async function AdminPayoutsPage({ searchParams }: PageProps<"/adm
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
+    listPendingRefunds(toActor(user)),
   ]);
   const sources = await payoutSources(ledger);
   // Everything not yet paid: waiting, failed, or being sent.
@@ -205,6 +209,46 @@ export default async function AdminPayoutsPage({ searchParams }: PageProps<"/adm
         />
       </section>
 
+      <section aria-labelledby="refunds-h" className="mt-10 space-y-3">
+        <h2 id="refunds-h" className="text-lg font-semibold">
+          Entry-fee refunds to make ({refunds.length})
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          Refunds are sent to Razorpay automatically and retried every night. If one stays here,
+          refund it by hand (Razorpay dashboard → Transactions → Payments → search the payment ID →
+          Issue Refund), then mark it refunded.
+        </p>
+        {refunds.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No refunds waiting.</p>
+        ) : (
+          <ul className="space-y-3">
+            {refunds.map((r) => {
+              const who = r.user.displayName ?? "(no name)";
+              return (
+                <li key={r.id} className="card-ds space-y-2 p-4 text-sm">
+                  <p>
+                    <span className="font-medium">{who}</span>
+                    {r.user.email ? ` · ${maskEmail(r.user.email)}` : ""} ·{" "}
+                    <span className="text-gold font-semibold">{formatINR(r.amountPaise)}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    {r.match.title} · {r.refundReason ?? "Refund"} · since {formatIST(r.updatedAt)}
+                  </p>
+                  <p className="text-muted-foreground">
+                    Razorpay payment ID:{" "}
+                    <span className="text-foreground font-mono">{r.cfPaymentId ?? "—"}</span>
+                  </p>
+                  <MarkRefundedButton
+                    paymentId={r.id}
+                    about={`${who} (${formatINR(r.amountPaise)})`}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       <section aria-labelledby="recon-h" className="mt-10 space-y-3">
         <h2 id="recon-h" className="text-lg font-semibold">
           Reconciliation flags
@@ -216,7 +260,7 @@ export default async function AdminPayoutsPage({ searchParams }: PageProps<"/adm
             {flags.map((f) => (
               <li key={f.id} className="flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  {formatIST(f.createdAt)} · {f.kind} {f.entityId}: ours {f.ours}, Cashfree{" "}
+                  {formatIST(f.createdAt)} · {f.kind} {f.entityId}: ours {f.ours}, provider{" "}
                   {f.theirs} (applied)
                 </span>
                 <ResolveFlagButton flagId={f.id} about={`${f.kind} ${f.entityId}`} />

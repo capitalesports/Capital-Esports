@@ -4,6 +4,7 @@ import { cancelMatch } from "@/server/services/matches";
 import { confirmRazorpayPayment, executeRefunds, startCheckout } from "@/server/services/payments";
 import { registerForMatch } from "@/server/services/registration";
 import { handleRazorpayWebhook } from "@/server/services/webhooks";
+import { listPendingRefunds, markRefundedManually } from "@/server/services/refunds";
 import { razorpayCheckoutSignature, razorpayWebhookSignature } from "@/lib/razorpay-signature";
 import type { Actor } from "@/lib/roles";
 import { addMinutes } from "@/lib/time";
@@ -334,5 +335,82 @@ describe("Razorpay refunds and recovery", () => {
     const reg = await regOf(m.id, u.id);
     expect(reg.status).toBe("CONFIRMED");
     expect((await paymentOf(reg.id)).cfPaymentId).toBe(p.id);
+  });
+});
+
+describe("refunds made by hand (DECISIONS M44)", () => {
+  async function pendingRefund() {
+    const { m, u, c } = await checkout();
+    const { p, response } = pay(c.paymentSessionId);
+    await confirmRazorpayPayment(player(u), response);
+    // Razorpay refuses the API refund (as for an account still under review): it stays pending.
+    fake.refunds.length = 0;
+    const payment = await testDb().payment.findFirstOrThrow({ where: { matchId: m.id } });
+    await testDb().payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "REFUND_PENDING",
+        refundId: `rf_${payment.id}`,
+        refundReason: "Match cancelled",
+      },
+    });
+    return { m, u, p, paymentId: payment.id };
+  }
+
+  it("admins see pending refunds and mark one refunded with a note; it is audited", async () => {
+    const { paymentId } = await pendingRefund();
+    const list = await listPendingRefunds(admin);
+    expect(list).toEqual([expect.objectContaining({ id: paymentId, amountPaise: FEE })]);
+
+    await markRefundedManually(admin, { paymentId, note: "Refunded in Razorpay dashboard" });
+    const after = await testDb().payment.findUniqueOrThrow({ where: { id: paymentId } });
+    expect(after.status).toBe("REFUNDED");
+    expect(after.refundedAt).not.toBeNull();
+    const audit = await testDb().auditLog.findFirst({
+      where: { action: "payment.refund.manual", entityId: paymentId },
+    });
+    expect(audit?.actorId).toBe(admin.id);
+    expect(await listPendingRefunds(admin)).toHaveLength(0);
+    // Twice is refused.
+    await expect(markRefundedManually(admin, { paymentId })).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+  });
+
+  it("only admins, and input is validated", async () => {
+    const { u, paymentId } = await pendingRefund();
+    const mod: Actor = { id: (await createUser({ role: "MODERATOR" })).id, role: "MODERATOR" };
+    for (const actor of [player(u), mod]) {
+      await expect(listPendingRefunds(actor)).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(markRefundedManually(actor, { paymentId })).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+    }
+    await expect(markRefundedManually(null, { paymentId })).rejects.toMatchObject({
+      code: "UNAUTHENTICATED",
+    });
+    await expect(markRefundedManually(admin, {})).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(
+      markRefundedManually(admin, { paymentId, note: "x".repeat(201) }),
+    ).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    expect((await testDb().payment.findUniqueOrThrow({ where: { id: paymentId } })).status).toBe(
+      "REFUND_PENDING",
+    );
+  });
+
+  it("a refund already made in the Razorpay dashboard is never sent again", async () => {
+    const { p, paymentId } = await pendingRefund();
+    // The admin used "Issue Refund" in the dashboard (no receipt from us).
+    Object.assign(fake.payments.get(p.id)!, { status: "refunded", amount_refunded: FEE });
+    const payment = await testDb().payment.findUniqueOrThrow({ where: { id: paymentId } });
+    await executeRefunds([payment]);
+    expect(
+      fake.calls.filter((x) => x.method === "POST" && x.path.endsWith("/refund")),
+    ).toHaveLength(0);
+    expect((await testDb().payment.findUniqueOrThrow({ where: { id: paymentId } })).status).toBe(
+      "REFUNDED",
+    );
   });
 });

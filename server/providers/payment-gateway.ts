@@ -127,6 +127,8 @@ export interface RazorpayPayment {
   currency: string;
   /** created | authorized | captured | refunded | failed */
   status: string;
+  /** Paise already refunded, by us or in the Razorpay dashboard. */
+  amount_refunded?: number;
 }
 
 interface RazorpayRefund {
@@ -248,6 +250,9 @@ export class RazorpayPaymentGateway implements PaymentGateway {
     // Razorpay refunds aren't idempotent by receipt: look first so a retry never refunds twice.
     const existing = await this.findRefund(i.providerPaymentId, i.refundId);
     if (existing) return { status: mapRazorpayRefundStatus(existing.status) };
+    // Already refunded some other way (e.g. "Issue Refund" in the dashboard, DECISIONS M44).
+    const payment = await this.fetchPayment(i.providerPaymentId);
+    if ((payment.amount_refunded ?? 0) >= i.amountPaise) return { status: "SUCCESS" };
     const created = await this.api<RazorpayRefund>(
       "POST",
       `/payments/${encodeURIComponent(i.providerPaymentId)}/refund`,
@@ -259,7 +264,9 @@ export class RazorpayPaymentGateway implements PaymentGateway {
   async fetchRefundStatus(i: Parameters<PaymentGateway["fetchRefundStatus"]>[0]) {
     if (!i.providerPaymentId) return "NOT_FOUND";
     const r = await this.findRefund(i.providerPaymentId, i.refundId);
-    return r ? mapRazorpayRefundStatus(r.status) : "NOT_FOUND";
+    if (r) return mapRazorpayRefundStatus(r.status);
+    const payment = await this.fetchPayment(i.providerPaymentId);
+    return payment.status === "refunded" ? "SUCCESS" : "NOT_FOUND";
   }
 }
 
