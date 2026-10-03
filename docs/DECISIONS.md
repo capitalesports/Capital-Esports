@@ -561,7 +561,7 @@ The test account's Razorpay refund API refused every request, and the owner will
 
 ### M45 A 5-minute keep-alive for reminders
 Vercel's Hobby plan runs crons once a day. The 30-minute match reminder, room notices and registration open/close only ran when someone opened a page, through the throttled catch-up (M27).
-- `.github/workflows/keep-alive.yml` opens `https://capitalesports.in/scrims` every 5 minutes. Public pages are rendered fresh (`no-store`), so each visit runs the catch-up. No secret is involved.
+- `.github/workflows/keep-alive.yml` and a cron-job.org job call `GET /api/keep-alive` every 5 minutes. It runs the same throttled catch-up as a page view and answers `{"ok":true}`. cron-job.org rejects big responses such as a full page ("output too large"). No secret is involved.
 - GitHub can delay scheduled runs by a few minutes, which the 30-minute reminder window absorbs. GitHub pauses schedules after 60 days without commits.
 - **Only during playing hours** (12:00 PM to 11:55 PM IST; cron-job.org runs the same window as a second pinger). Each visit also wakes the database and the server, so first loads are fast in those hours. A database kept awake around the clock would use up the Neon free plan's monthly compute. Matches outside these hours get their reminder only if someone visits the site. A paid Vercel plan (crons every 5 minutes) or an external pinger such as cron-job.org would replace it.
 
