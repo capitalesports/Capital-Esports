@@ -51,7 +51,7 @@ test("admin fills the results (players don't submit), approves, the leaderboard 
   await as(page, "9999900001", `/admin/results/${matchId}`);
   await page.goto(`/admin/results/${matchId}`);
   const reader = page.getByRole("region", { name: "Fill from screenshots" });
-  await reader.getByLabel("Screenshots").setInputFiles({ name: "end.png", mimeType: "image/png", buffer: PNG });
+  await reader.getByLabel("Choose screenshots").setInputFiles({ name: "end.png", mimeType: "image/png", buffer: PNG });
   await reader.getByRole("button", { name: "Read screenshots" }).click();
   await expect(page.getByText(/Screenshot reading isn't set up yet/)).toBeVisible();
 

@@ -1,12 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ScanTextIcon } from "lucide-react";
+import { useState } from "react";
+import { ImagePlusIcon, ScanTextIcon } from "lucide-react";
 import { readResultScreenshotsAction } from "@/app/admin/results/actions";
 import { useAction } from "@/components/common/use-action";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Button, buttonVariants } from "@/components/ui/button";
 import type { MatchOutcome } from "@/lib/result-matching";
+import { cn } from "@/lib/utils";
 
 export type ReadOutcome = MatchOutcome & { rowsRead: number };
 
@@ -21,8 +21,7 @@ export function ScreenshotReader({
   matchId: string;
   onRead: (outcome: ReadOutcome) => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [count, setCount] = useState(0);
+  const [files, setFiles] = useState<string[]>([]);
   const read = useAction(readResultScreenshotsAction);
 
   return (
@@ -37,7 +36,7 @@ export function ScreenshotReader({
         approve.
       </p>
       <form
-        className="flex flex-wrap items-end gap-3"
+        className="space-y-3"
         onSubmit={async (e) => {
           e.preventDefault();
           const form = new FormData(e.currentTarget);
@@ -46,22 +45,36 @@ export function ScreenshotReader({
           if (r.ok) onRead(r.data);
         }}
       >
-        <div className="space-y-1">
-          <Label htmlFor="result-shots">Screenshots</Label>
-          <input
-            ref={input}
-            id="result-shots"
-            name="screenshots"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            multiple
-            onChange={(e) => setCount(e.target.files?.length ?? 0)}
-            className="min-h-tap text-sm"
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          {/* The native file picker is hidden; this label is the visible "button" that opens it. */}
+          <label
+            htmlFor="result-shots"
+            className={cn(
+              buttonVariants({ variant: "gold-outline" }),
+              "cursor-pointer focus-within:ring-2",
+            )}
+          >
+            <ImagePlusIcon aria-hidden className="size-4" />
+            Choose screenshots
+            <input
+              id="result-shots"
+              name="screenshots"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              className="sr-only"
+              onChange={(e) => setFiles([...(e.target.files ?? [])].map((f) => f.name))}
+            />
+          </label>
+          <Button type="submit" disabled={read.pending || files.length === 0}>
+            {read.pending ? "Reading…" : "Read screenshots"}
+          </Button>
         </div>
-        <Button type="submit" disabled={read.pending || count === 0}>
-          {read.pending ? "Reading…" : "Read screenshots"}
-        </Button>
+        <p className="text-muted-foreground text-sm" aria-live="polite">
+          {files.length
+            ? `${files.length} chosen: ${files.join(", ")}`
+            : "No screenshots chosen yet."}
+        </p>
       </form>
     </section>
   );
