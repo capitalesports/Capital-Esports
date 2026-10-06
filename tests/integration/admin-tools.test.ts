@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { pointsConfigFor } from "@/server/services/leaderboard";
-import { sendAnnouncement, listAnnouncements } from "@/server/services/announcements";
+import {
+  clearAllNotifications,
+  deleteAnnouncement,
+  listAnnouncements,
+  sendAnnouncement,
+} from "@/server/services/announcements";
 import { exportAuditCsv } from "@/server/services/audit-export";
 import { listPointsConfigs, savePointsConfig } from "@/server/services/points-config";
 import type { Actor } from "@/lib/roles";
@@ -38,6 +43,8 @@ describe("admin tools are admin-only", () => {
     ["savePointsConfig", (a) => savePointsConfig(a, pointsInput)],
     ["sendAnnouncement", (a) => sendAnnouncement(a, announcement)],
     ["listAnnouncements", (a) => listAnnouncements(a)],
+    ["deleteAnnouncement", (a) => deleteAnnouncement(a, { announcementId: "x" })],
+    ["clearAllNotifications", (a) => clearAllNotifications(a, { confirm: "CLEAR" })],
     ["exportAuditCsv", (a) => exportAuditCsv(a, {})],
   ];
   it.each(calls)("%s refuses moderators, players and anonymous users", async (_n, call) => {
@@ -123,6 +130,28 @@ describe("announcements", () => {
       ["ALL", 4],
       ["BGMI", 1],
     ]);
+
+    // Taking the BGMI one back removes it from every bell, and only that one.
+    await expect(deleteAnnouncement(admin, { announcementId: "nope" })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect(await deleteAnnouncement(admin, { announcementId: sent[1]!.id })).toEqual({
+      removed: 1,
+    });
+    expect(await testDb().notification.count({ where: { type: "ANNOUNCEMENT" } })).toBe(4);
+    expect((await listAnnouncements(admin)).map((s) => s.deleted)).toEqual([false, true]);
+  });
+
+  it("clears every player's notifications only with the typed confirmation", async () => {
+    await createPlayer("BGMI");
+    await sendAnnouncement(admin, announcement);
+    await expect(clearAllNotifications(admin, { confirm: "clear" })).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    const { removed } = await clearAllNotifications(admin, { confirm: "CLEAR" });
+    expect(removed).toBeGreaterThan(0);
+    expect(await testDb().notification.count()).toBe(0);
+    expect(await testDb().auditLog.count({ where: { action: "notifications.clearAll" } })).toBe(1);
   });
 });
 

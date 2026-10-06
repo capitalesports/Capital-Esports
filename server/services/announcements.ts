@@ -112,6 +112,14 @@ export async function listAnnouncements(actor: Actor | null, take = 20) {
     take,
     include: { actor: { select: { displayName: true } } },
   });
+  const deleted = new Set(
+    (
+      await db.auditLog.findMany({
+        where: { action: "announcement.delete", entityId: { in: rows.map((r) => r.id) } },
+        select: { entityId: true },
+      })
+    ).map((d) => d.entityId),
+  );
   return rows.map((r) => {
     const a = (r.after ?? {}) as {
       title?: string;
@@ -129,6 +137,72 @@ export async function listAnnouncements(actor: Actor | null, take = 20) {
       link: a.link ?? null,
       audience: a.audience ?? r.entityId,
       recipients: a.recipients ?? 0,
+      /** Taken back from every player's bell. */
+      deleted: deleted.has(r.id),
     };
+  });
+}
+
+/** How long after sending an announcement's notifications can still be matched to it. */
+const DELIVERY_WINDOW_MS = 60 * 60_000;
+
+/**
+ * Take a sent announcement back: delete its notification from every player's bell (push messages
+ * already delivered to phones cannot be recalled). Safe to repeat.
+ */
+export async function deleteAnnouncement(actor: Actor | null, input: unknown) {
+  const me = assertAdmin(actor);
+  const { announcementId } = parseInput(z.object({ announcementId: z.string().min(1) }), input);
+  const sent = await db.auditLog.findFirst({
+    where: { id: announcementId, action: "announcement.send" },
+  });
+  if (!sent) throw new AppError("NOT_FOUND", "Announcement not found.");
+  const a = (sent.after ?? {}) as { title?: string; body?: string };
+  // Its notifications were created after it was sent and before the next announcement.
+  const next = await db.auditLog.findFirst({
+    where: { action: "announcement.send", createdAt: { gt: sent.createdAt } },
+    orderBy: { createdAt: "asc" },
+    select: { createdAt: true },
+  });
+  const until = new Date(
+    Math.min(sent.createdAt.getTime() + DELIVERY_WINDOW_MS, next?.createdAt.getTime() ?? Infinity),
+  );
+  return db.$transaction(async (tx) => {
+    const { count } = await tx.notification.deleteMany({
+      where: {
+        type: "ANNOUNCEMENT",
+        title: a.title ?? "",
+        body: a.body ?? "",
+        createdAt: { gte: sent.createdAt, lt: until },
+      },
+    });
+    await writeAudit(tx, {
+      actorId: me.id,
+      action: "announcement.delete",
+      entityType: "Announcement",
+      entityId: sent.id,
+      after: { title: a.title, removed: count },
+    });
+    return { removed: count };
+  });
+}
+
+/** Empty every player's bell (all notifications of every kind). Typed confirmation required. */
+export async function clearAllNotifications(actor: Actor | null, input: unknown) {
+  const me = assertAdmin(actor);
+  parseInput(
+    z.object({ confirm: z.literal("CLEAR", { message: "Type CLEAR to confirm" }) }),
+    input,
+  );
+  return db.$transaction(async (tx) => {
+    const { count } = await tx.notification.deleteMany({});
+    await writeAudit(tx, {
+      actorId: me.id,
+      action: "notifications.clearAll",
+      entityType: "Notification",
+      entityId: "ALL",
+      after: { removed: count },
+    });
+    return { removed: count };
   });
 }

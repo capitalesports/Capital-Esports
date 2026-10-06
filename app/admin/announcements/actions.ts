@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { runAction } from "@/server/action";
 import { requireAdmin } from "@/server/auth/guards";
-import { sendAnnouncement } from "@/server/services/announcements";
+import {
+  clearAllNotifications,
+  deleteAnnouncement,
+  sendAnnouncement,
+} from "@/server/services/announcements";
 
 export async function sendAnnouncementAction(input: {
   title: string;
@@ -16,4 +20,22 @@ export async function sendAnnouncementAction(input: {
     revalidatePath("/admin/announcements");
     return result.recipients;
   }, "Announcement sent");
+}
+
+export async function deleteAnnouncementAction(input: { announcementId: string }) {
+  return runAction(async () => {
+    const r = await deleteAnnouncement(await requireAdmin(), input);
+    revalidatePath("/admin/announcements");
+    revalidatePath("/", "layout");
+    return r.removed;
+  }, "Removed from every player's notifications");
+}
+
+export async function clearAllNotificationsAction(input: { confirm: string }) {
+  return runAction(async () => {
+    const r = await clearAllNotifications(await requireAdmin(), input);
+    revalidatePath("/admin/announcements");
+    revalidatePath("/", "layout");
+    return r.removed;
+  }, "Every player's notifications cleared");
 }
