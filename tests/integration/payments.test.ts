@@ -242,14 +242,17 @@ describe("refunds", () => {
     ).toBe(2);
   });
 
-  it("a player who cancels a paid entry is not refunded (DECISIONS M42)", async () => {
+  it("a paid entry cannot be cancelled and stays paid (DECISIONS M42, M50)", async () => {
     const m = await paidMatch();
     const a = await createPlayer();
     await registerForMatch(player(a), { matchId: m.id });
     const reg = await regOf(m.id, a.id);
     await send(pgWebhook("PAYMENT_SUCCESS_WEBHOOK", (await paymentOf(reg.id)).orderId));
-    await cancelRegistration(player(a), { matchId: m.id });
-    expect((await regOf(m.id, a.id)).status).toBe("CANCELLED");
+    await expect(cancelRegistration(player(a), { matchId: m.id })).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "Paid entries cannot be cancelled.",
+    });
+    expect((await regOf(m.id, a.id)).status).toBe("CONFIRMED");
     const pay = await paymentOf(reg.id);
     expect(pay.status).toBe("PAID");
     expect(pay.refundId).toBeNull();

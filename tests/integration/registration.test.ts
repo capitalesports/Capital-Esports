@@ -277,7 +277,7 @@ describe("captain-entered roster (teammates need no account)", () => {
     expect(mine).toEqual([
       expect.objectContaining({
         teamName: "Night Owls",
-        match: expect.objectContaining({ id: m.id, isEntryList: true, tournament: { title: "Capacity test" } }),
+        match: expect.objectContaining({ id: m.id, isEntryList: true, tournament: expect.objectContaining({ title: "Capacity test" }) }),
       }),
     ]);
   });

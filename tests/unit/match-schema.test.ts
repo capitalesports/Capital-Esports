@@ -91,7 +91,7 @@ describe("matchFormSchema", () => {
       "FOUR_V_FOUR",
     ]);
     expect(MODES_FOR_GAME.BGMI).toEqual(MODES_FOR_GAME.FREE_FIRE);
-    expect(MODES_FOR_GAME.VALORANT).toEqual(["ONE_V_ONE", "TWO_V_TWO", "FIVE_V_FIVE"]);
+    expect(MODES_FOR_GAME.VALORANT).toEqual(["ONE_V_ONE", "TWO_V_TWO", "FIVE_V_FIVE", "SOLO"]);
     expect(
       errorsOf({ ...valid, game: "VALORANT", mode: "FOUR_V_FOUR" }),
     ).toHaveProperty("mode");

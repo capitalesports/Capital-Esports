@@ -7,6 +7,7 @@ import {
   heroTagline,
   resolveHeroStats,
   todayCountLabel,
+  sortByModeOrder,
   tournamentFormatLabel,
 } from "@/lib/home";
 
@@ -43,12 +44,33 @@ describe("home copy", () => {
     expect(todayCountLabel(1)).toBe("1 match today");
     expect(todayCountLabel(4)).toBe("4 matches today");
   });
+  it("orders tournament mode buttons: Valorant Deathmatch, Scrims, 5v5", () => {
+    const list = (["FIVE_V_FIVE", "TWO_V_TWO", "SOLO"] as const).map((mode) => ({ mode }));
+    expect(sortByModeOrder("VALORANT", list).map((t) => t.mode)).toEqual([
+      "SOLO",
+      "TWO_V_TWO",
+      "FIVE_V_FIVE",
+    ]);
+    const br = (["FOUR_V_FOUR", "SQUAD", "SOLO", "DUO"] as const).map((mode) => ({ mode }));
+    expect(sortByModeOrder("BGMI", br).map((t) => t.mode)).toEqual([
+      "SOLO",
+      "DUO",
+      "SQUAD",
+      "FOUR_V_FOUR",
+    ]);
+  });
   it("uses the design's format labels", () => {
     expect(tournamentFormatLabel("FREE_FIRE", "SQUAD")).toBe("4 Squad");
     expect(tournamentFormatLabel("BGMI", "SQUAD")).toBe("4 Squad");
+    expect(tournamentFormatLabel("FREE_FIRE", "TWO_V_TWO")).toBe("Lone Wolf 2v2");
+    expect(tournamentFormatLabel("FREE_FIRE", "FOUR_V_FOUR")).toBe("Clash Squad");
+    expect(tournamentFormatLabel("BGMI", "TWO_V_TWO")).toBe("TDM 2v2");
+    expect(tournamentFormatLabel("VALORANT", "SOLO")).toBe("Deathmatch");
+    expect(tournamentFormatLabel("VALORANT", "TWO_V_TWO")).toBe("Scrims");
+    expect(tournamentFormatLabel("BGMI", "FOUR_V_FOUR")).toBe("TDM");
     expect(tournamentFormatLabel("VALORANT", "FIVE_V_FIVE")).toBe("5v5");
-    expect(tournamentFormatLabel("FREE_FIRE", "ONE_V_ONE")).toBe("1v1");
-    expect(tournamentFormatLabel("BGMI", "TWO_V_TWO")).toBe("2v2");
+    expect(tournamentFormatLabel("FREE_FIRE", "ONE_V_ONE")).toBe("Lone Wolf 1v1");
+    expect(tournamentFormatLabel("BGMI", "TWO_V_TWO")).toBe("TDM 2v2");
   });
   it("splits the admin tagline into the design's two lines", () => {
     expect(heroTagline(HOME_DEFAULTS, "FREE_FIRE")).toEqual(["Squad up", "Survive & dominate"]);

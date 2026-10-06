@@ -5,10 +5,10 @@ import { publicMatchSelect } from "@/server/queries/matches";
 import type { Game } from "@/lib/games";
 import { brPoints } from "@/lib/points";
 import {
+  bracketShape,
   lobbyStandings,
   mondayOfIstWeek,
-  roundCount,
-  type BracketSize,
+  walkBracket,
   type LobbyStanding,
 } from "@/lib/tournament";
 import { pointsConfigFor } from "./leaderboard";
@@ -129,19 +129,136 @@ export async function getTournamentMatches(tournamentId: string) {
 
 export type TournamentMatch = Awaited<ReturnType<typeof getTournamentMatches>>[number];
 
-/** Bracket rounds with a placeholder for every slot not yet created. */
-export function bracketRounds(size: number, matches: TournamentMatch[]) {
-  const total = roundCount(size as BracketSize);
-  return Array.from({ length: total }, (_, i) => {
-    const round = i + 1;
-    const slots = size / 2 ** round;
+/** A bracket entrant: its team, or the solo player. */
+export function unitOf(r: { teamId: string | null; userId: string }): string {
+  return r.teamId ?? r.userId;
+}
+
+/**
+ * Where a bracket stands (DECISIONS M50): the confirmed sign-ups in sign-up order are round 1;
+ * each decided round feeds the next (byes follow from the counts, nothing extra is stored).
+ */
+export async function bracketState(reader: Reader, entryMatchId: string, tournamentId: string) {
+  const [entries, matches] = await Promise.all([
+    reader.registration.findMany({
+      where: { matchId: entryMatchId, status: "CONFIRMED" },
+      orderBy: { position: "asc" },
+      select: {
+        userId: true,
+        teamId: true,
+        teamName: true,
+        team: { select: { name: true } },
+        user: { select: { displayName: true } },
+      },
+    }),
+    reader.match.findMany({
+      where: { tournamentId, bracketRound: { not: null } },
+      select: {
+        bracketRound: true,
+        bracketIndex: true,
+        results: {
+          where: { approvedAt: { not: null }, won: true },
+          select: { registration: { select: { teamId: true, userId: true } } },
+        },
+      },
+    }),
+  ]);
+  const winners = new Map(
+    matches.map((m) => {
+      const w = m.results[0]?.registration;
+      return [`${m.bracketRound}:${m.bracketIndex}`, w ? unitOf(w) : null];
+    }),
+  );
+  const names = new Map(
+    entries.map((e) => [unitOf(e), e.team?.name ?? e.teamName ?? e.user.displayName ?? "Player"]),
+  );
+  const rounds = walkBracket(entries.map(unitOf), (r, i) => winners.get(`${r}:${i}`) ?? null);
+  return { entrants: entries.length, names, rounds };
+}
+
+export interface BracketViewRound {
+  round: number;
+  matches: (TournamentMatch | null)[];
+  /** Who skips this round: a name, "TBD" while unknown, or null when nobody does. */
+  bye: string | null;
+}
+
+/** Every round of the bracket, with a placeholder for each match not created yet. */
+export function bracketRounds(
+  state: Awaited<ReturnType<typeof bracketState>>,
+  matches: TournamentMatch[],
+): BracketViewRound[] {
+  return bracketShape(state.entrants).map((shape) => {
+    const known = state.rounds[shape.round - 1];
     return {
-      round,
+      round: shape.round,
       matches: Array.from(
-        { length: slots },
+        { length: shape.matches },
         (_, index) =>
-          matches.find((m) => m.bracketRound === round && m.bracketIndex === index) ?? null,
+          matches.find((m) => m.bracketRound === shape.round && m.bracketIndex === index) ?? null,
+      ),
+      bye: shape.byes ? (known?.bye ? (state.names.get(known.bye) ?? "Player") : "TBD") : null,
+    };
+  });
+}
+
+export interface TournamentLobby {
+  lobby: number;
+  /** Team names (team modes) or player names, in seat order. */
+  names: string[];
+}
+
+/**
+ * Lobby tournaments after registration closed (DECISIONS M50): who is in which lobby (taken from
+ * the first match; players keep their lobby in every match), and the viewer's own lobby.
+ */
+export async function getTournamentLobbies(tournamentId: string, viewerId: string | null) {
+  const first = await db.match.findFirst({
+    where: {
+      tournamentId,
+      isEntryList: false,
+      parentMatchId: null,
+      bracketRound: null,
+      lobbyNumber: { not: null },
+    },
+    orderBy: { startsAt: "asc" },
+    select: { id: true },
+  });
+  if (!first) return { lobbies: [] as TournamentLobby[], mine: null };
+  const matches = await db.match.findMany({
+    where: { OR: [{ id: first.id }, { parentMatchId: first.id }] },
+    orderBy: { lobbyNumber: "asc" },
+    select: {
+      lobbyNumber: true,
+      registrations: {
+        where: { status: { in: ["CONFIRMED", "NO_SHOW"] } },
+        orderBy: { position: "asc" },
+        select: {
+          userId: true,
+          teamName: true,
+          team: { select: { name: true } },
+          user: { select: { displayName: true } },
+          members: { select: { userId: true } },
+        },
+      },
+    },
+  });
+  let mine: number | null = null;
+  const lobbies = matches.map((m) => {
+    const lobby = m.lobbyNumber ?? 1;
+    if (
+      viewerId &&
+      m.registrations.some(
+        (r) => r.userId === viewerId || r.members.some((x) => x.userId === viewerId),
+      )
+    )
+      mine = lobby;
+    return {
+      lobby,
+      names: m.registrations.map(
+        (r) => r.team?.name ?? r.teamName ?? r.user.displayName ?? "Player",
       ),
     };
   });
+  return { lobbies, mine: mine as number | null };
 }

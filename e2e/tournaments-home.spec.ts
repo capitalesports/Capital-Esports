@@ -93,8 +93,8 @@ test("BGMI lobby-points tournament: 3 linked matches, cumulative standings, publ
   await lobby.getByLabel("How many").fill("3");
   await lobby.getByRole("button", { name: "Add matches" }).click();
   await expect(page.getByText("Lobby matches added")).toBeVisible();
-  await lobby.getByRole("button", { name: "Lock entries" }).click();
-  await expect(page.getByText("Entries locked into every lobby match")).toBeVisible();
+  await lobby.getByRole("button", { name: "Close registration and split lobbies" }).click();
+  await expect(page.getByText("Registration closed; entries split into lobbies")).toBeVisible();
 
   // Results for the 3 lobby matches (placement, kills) per team, approved.
   const plan = [
@@ -169,7 +169,9 @@ test("BGMI lobby-points tournament: 3 linked matches, cumulative standings, publ
   await expect(slide.getByText("Charlie", { exact: true })).toBeVisible();
 });
 
-test("Valorant 8-team bracket renders after generation", async ({ page }) => {
+test("Valorant bracket with 9 teams: drawn in sign-up order, the 9th gets a bye", async ({
+  page,
+}) => {
   const db = e2eDb();
   const admin = await db.user.findUniqueOrThrow({ where: { phone: "+919999900001" } });
   const startsAt = new Date(Date.now() + 2 * 86400_000);
@@ -182,7 +184,6 @@ test("Valorant 8-team bracket renders after generation", async ({ page }) => {
       title: "E2E Val Cup",
       format: "BRACKET",
       mode: "FIVE_V_FIVE",
-      bracketSize: 8,
       startsAt,
       weekOf,
       prizePoolPaise: 800000,
@@ -196,7 +197,7 @@ test("Valorant 8-team bracket renders after generation", async ({ page }) => {
       title: "E2E Val Cup — sign-up",
       startsAt,
       registrationClosesAt: new Date(startsAt.getTime() - 1800_000),
-      maxSlots: 8,
+      maxSlots: 2,
       status: "REGISTRATION_OPEN",
       isEntryList: true,
       tournamentId: t.id,
@@ -204,23 +205,25 @@ test("Valorant 8-team bracket renders after generation", async ({ page }) => {
     },
   });
   await db.tournament.update({ where: { id: t.id }, data: { entryMatchId: entry.id } });
-  for (let i = 1; i <= 8; i++) await enterTeam(entry.id, "VALORANT", `Seed${i}`, i, 2000 + i * 10);
+  for (let i = 1; i <= 9; i++) await enterTeam(entry.id, "VALORANT", `Seed${i}`, i, 2000 + i * 10);
 
   await asAdmin(page);
   await page.goto(`/admin/tournaments/${t.id}`);
   await expect(
-    page.getByRole("region", { name: "Bracket" }).getByText("8/8 entries confirmed"),
+    page.getByRole("region", { name: "Bracket" }).getByText("9 entries confirmed"),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Generate bracket" }).click();
-  await expect(page.getByText("Bracket generated")).toBeVisible();
+  await page.getByRole("button", { name: "Draw bracket now" }).click();
+  await expect(page.getByText("Bracket drawn")).toBeVisible();
 
   await page.goto("/tournament/valorant");
   const bracket = page.getByRole("region", { name: "Tournament bracket" });
-  await expect(bracket.getByText("Quarterfinals")).toBeVisible();
-  await expect(bracket.getByText("Semifinals")).toBeVisible();
+  // 9 teams: 4 rounds (4 games + a bye, 2 + a bye, 1 + a bye, the final).
+  await expect(bracket.getByText("Round 1", { exact: true })).toBeVisible();
   await expect(bracket.getByText("Final", { exact: true })).toBeVisible();
   await expect(bracket.getByText("Seed1", { exact: true })).toBeVisible();
   await expect(bracket.getByText("Seed8", { exact: true })).toBeVisible();
+  await expect(bracket.getByText("Seed9", { exact: true })).toBeVisible();
+  await expect(bracket.getByText("Bye: straight to the next round").first()).toBeVisible();
 });
 
 test.describe("winners carousel", () => {

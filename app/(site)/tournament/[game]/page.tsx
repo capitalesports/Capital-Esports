@@ -8,9 +8,9 @@ import { GameBadge } from "@/components/game/game-badge";
 import { RegistrationPanel } from "@/components/match/registration-panel";
 import {
   BracketView,
+  LobbyList,
   LobbyStandingsTable,
   StreamEmbed,
-  TournamentSchedule,
 } from "@/components/tournament/tournament-views";
 import { TournamentModeSwitch } from "@/components/tournament/mode-switch";
 import { TournamentPartners } from "@/components/tournament/tournament-partners";
@@ -22,15 +22,18 @@ import { getActiveSponsors } from "@/server/services/content";
 import { pointsConfigFor } from "@/server/services/leaderboard";
 import {
   bracketRounds,
+  bracketState,
   getCurrentTournaments,
+  getTournamentLobbies,
   getTournamentMatches,
   lobbyStandingsFor,
 } from "@/server/services/tournament-queries";
 import { db } from "@/server/db";
 import { artKey } from "@/lib/artwork";
 import { gameFromSlug, GAME_CONFIG } from "@/lib/games";
-import { tournamentFormatLabel } from "@/lib/home";
+import { sortByModeOrder, tournamentFormatLabel } from "@/lib/home";
 import { formatEntryFee, formatINR } from "@/lib/money";
+import { slotUnit } from "@/lib/match-modes";
 import { requireGameSlug } from "@/lib/params";
 import { formatDateIST, formatIST } from "@/lib/time";
 import { entryCountLabel, pickByMode } from "@/lib/tournament";
@@ -42,7 +45,10 @@ export async function generateMetadata({
 }: PageProps<"/tournament/[game]">): Promise<Metadata> {
   const game = gameFromSlug((await params).game);
   if (!game) return { title: "Tournament" };
-  const t = pickByMode(await getCurrentTournaments(game), (await searchParams).mode);
+  const t = pickByMode(
+    sortByModeOrder(game, await getCurrentTournaments(game)),
+    (await searchParams).mode,
+  );
   return {
     title: t ? t.title : `${GAME_CONFIG[game].name} tournament`,
     description: t
@@ -57,7 +63,7 @@ export default async function GameTournamentPage({
 }: PageProps<"/tournament/[game]">) {
   const game = requireGameSlug((await params).game);
   const cfg = GAME_CONFIG[game];
-  const current = await getCurrentTournaments(game);
+  const current = sortByModeOrder(game, await getCurrentTournaments(game));
   const t = pickByMode(current, (await searchParams).mode);
 
   if (!t) {
@@ -92,11 +98,22 @@ export default async function GameTournamentPage({
   const panel =
     entry && entry.status === "REGISTRATION_OPEN" ? await buildPanelState(entry, user, path) : null;
   const standings = t.format === "LOBBY_POINTS" ? await lobbyStandingsFor(db, t.id) : [];
+  // The bracket is drawn when registration closes; until then only the sign-up count shows.
+  // Lobby tournaments: who plays in which lobby, once registration has closed.
+  const lobbyInfo =
+    t.format === "LOBBY_POINTS" && entry?.status === "REGISTRATION_CLOSED"
+      ? await getTournamentLobbies(t.id, user?.id ?? null)
+      : null;
+  const bracket =
+    t.format === "BRACKET" && t.entryMatchId && matches.length
+      ? await bracketState(db, t.entryMatchId, t.id)
+      : null;
   const winners = (t.winners as PublishedWinner[] | null) ?? null;
 
   return (
     <div className="py-6">
       <TournamentModeSwitch
+        game={game}
         basePath={basePath}
         modes={current.map((c) => c.mode)}
         active={t.mode}
@@ -141,7 +158,7 @@ export default async function GameTournamentPage({
             <dt className="text-muted-foreground text-xs">Format</dt>
             <dd className="font-heading text-lg">
               {t.format === "BRACKET"
-                ? `${tournamentFormatLabel(game, t.mode)} · ${t.bracketSize}-${t.mode === "ONE_V_ONE" ? "player" : "team"} single elimination`
+                ? `${tournamentFormatLabel(game, t.mode)} · single elimination`
                 : `Lobby points · ${tournamentFormatLabel(game, t.mode)}`}
             </dd>
           </div>
@@ -151,9 +168,7 @@ export default async function GameTournamentPage({
           </div>
           <div>
             <dt className="text-muted-foreground text-xs">{entryCountLabel(t.mode)}</dt>
-            <dd className="font-heading text-lg">
-              {entry?._count.registrations ?? 0}/{entry?.maxSlots ?? "—"}
-            </dd>
+            <dd className="font-heading text-lg">{entry?._count.registrations ?? 0}</dd>
           </div>
         </dl>
       </section>
@@ -169,13 +184,25 @@ export default async function GameTournamentPage({
             </section>
           ) : null}
           <StreamEmbed url={t.streamUrl} title={t.title} />
+          {lobbyInfo?.lobbies.length ? (
+            <section aria-labelledby="lobbies-h" className="space-y-3">
+              <h2 id="lobbies-h" className="text-xl font-bold">
+                Lobbies
+              </h2>
+              <LobbyList
+                lobbies={lobbyInfo.lobbies}
+                mine={lobbyInfo.mine}
+                unit={slotUnit(t.mode)}
+              />
+            </section>
+          ) : null}
           <section aria-labelledby="bracket-h" className="space-y-3">
             <h2 id="bracket-h" className="text-xl font-bold">
               {t.format === "BRACKET" ? "Bracket" : "Standings"}
             </h2>
             {t.format === "BRACKET" ? (
-              matches.length && t.bracketSize ? (
-                <BracketView rounds={bracketRounds(t.bracketSize, matches)} linkBase="/scrims" />
+              bracket ? (
+                <BracketView rounds={bracketRounds(bracket, matches)} linkBase="/scrims" />
               ) : (
                 <p className="text-muted-foreground text-sm">
                   The bracket is drawn when sign-ups close.
@@ -191,14 +218,6 @@ export default async function GameTournamentPage({
               </>
             )}
           </section>
-          {t.format === "LOBBY_POINTS" ? (
-            <section aria-labelledby="schedule-h" className="space-y-3">
-              <h2 id="schedule-h" className="text-xl font-bold">
-                Matches
-              </h2>
-              <TournamentSchedule matches={matches} linkBase="/scrims" />
-            </section>
-          ) : null}
           <section aria-labelledby="rules-h" className="space-y-2">
             <h2 id="rules-h" className="text-xl font-bold">
               Rules

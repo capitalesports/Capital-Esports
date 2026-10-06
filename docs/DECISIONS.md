@@ -604,3 +604,35 @@ At the owner's request, players no longer submit their own results. Staff upload
 Editing **Solo Rush** (Free Fire 1v1, 4 confirmed players) failed with "4 slots are already filled". In an open-entry scrim, `maxSlots` is the size of one lobby: 1v1 → 2. Extra entries are split into more lobbies at close (M-lobbies). So the confirmed count is not capped by it.
 
 `updateMatch` now checks `maxSlots` against confirmed entries only for capped matches: tournament matches, bracket rounds and entry lists.
+
+### M50 Tournaments: uncapped sign-ups, lobbies at close, brackets of any size, cancel only free entries
+At the owner's request (built on localhost first, deployed after approval):
+- **Sign-ups are uncapped.** A tournament sign-up list takes every registration (`takesEveryone` in `lib/lobbies.ts`). Its `maxSlots` is one lobby (or one game) for display only. The admin form has no size field any more (`Tournament.bracketSize` stays null).
+- **Lobby tournaments** (Free Fire and BGMI solo/duo/squad; Valorant Solo = Deathmatch, 10 players):
+  - When registration closes (30 minutes before the start; the status job or the admin "Close registration and split lobbies" button), the confirmed entries are split into balanced lobbies of at most one lobby: Free Fire 48 players, BGMI 100, Deathmatch 10. Duo counts players (24 duos = 48). Example: 52 → 26 + 26 (`planTournamentLobbies`).
+  - A lobby is not opened with fewer than 10 players; entries that fit no lobby are removed, refunded and told (`TOURNAMENT_UNPLACED`).
+  - Each match (round) becomes Lobby 1. Every extra lobby is its own match (room, results) pointing back at it. A player keeps the same lobby in every match.
+  - No match added → one "Match 1" at the start time. Matches added after close are split the same way.
+  - Each player gets a bell notice "You're in Lobby N" (`TOURNAMENT_LOBBY`, no email). The dashboard shows "Lobby N" on the lobby match.
+  - Standings add up every lobby's results: one result board per tournament.
+  - Deathmatch is scored like a lobby. With no placement table configured for Valorant, the default battle-royale table and 1 point per kill apply (`lobbyScoring`).
+- **Brackets** (all head-to-head modes, e.g. Valorant 1v1, 2v2, 5v5; any number of teams ≥ 2):
+  - At close, round 1 pairs entries in sign-up order: 1v2, 3v4, and so on. With an odd count the last one gets a bye straight to the next round.
+  - Each next round is created when every match of the round is decided: last round's bye first, then the winners in match order. So a team never gets two byes in a row. Example, 9 teams: 4 games + a bye; then 5 teams, 2 games + a bye; then 3 teams, 1 game + a bye; then the final.
+  - Byes are not stored; they follow from the sign-up order and the results (`walkBracket`).
+  - Reopening a decided match removes the later rounds until one of them has started.
+  - Podium: final winner, final loser, then the loser of the round before the final with the better round difference.
+  - Rounds are named Final, Semifinals, Quarterfinals, otherwise "Round N".
+- **What players see.** Before close: the dashboard shows the sign-up as Confirmed with the number of slots booked. After close: the lobby number (lobby tournaments) or the bracket (dashboard and tournament page). Bracket players get a bell notice (`BRACKET_READY`).
+- **Slot-confirmed email** for a tournament sign-up has no lobby number. It says "After registration closes, check your lobby number (bracket) on the dashboard." The button is "Check your lobby on the dashboard", linking to /dashboard.
+- **Cancelling:**
+  - Players can cancel only a free entry, until registration closes; the slot goes to the next player. This applies to scrims and tournaments.
+  - A paid entry is final ("Paid entries cannot be cancelled."). An unpaid attempt at a paid match can still be dropped.
+  - Account deletion still follows the registration window and refunds paid entries (M39).
+- **Tournament matches** have no minimum-players rule: they are filled from the sign-up list, so the status job never auto-cancels them.
+- **Later adjustments (owner's review on localhost):**
+  - **Tournament page.** It never lists the lobby matches (one tournament can have 8+ lobbies). After close it shows a "Lobbies" section: one collapsible card per lobby with its players, and "You're in Lobby N" for the viewer (`getTournamentLobbies`).
+  - **Duo lobbies** split in pairs so partners stay together (`planDuoTournamentLobbies`).
+  - **The bracket** draws gold lines with arrows from each game to the next round (`lib/bracket-layout.ts`).
+  - **Mode names** (`gameModeLabel`): Valorant Solo = Deathmatch, Valorant 2v2 = Scrims; Free Fire 1v1/2v2 = Lone Wolf, 4v4 = Clash Squad; BGMI 4v4 = TDM, other head-to-head = TDM 1v1/2v2.
+  - **Mode buttons** have a fixed order per game (`sortByModeOrder`): Valorant Deathmatch, Scrims, 5v5, 1v1; Free Fire/BGMI Solo, Duo, Squad, then head-to-head.

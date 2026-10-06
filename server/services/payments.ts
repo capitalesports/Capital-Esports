@@ -19,7 +19,7 @@ import {
   type PaymentEvent,
   type RefundEvent,
 } from "@/lib/payments";
-import { isOpenEntry } from "@/lib/lobbies";
+import { takesEveryone } from "@/lib/lobbies";
 import { verifyRazorpayCheckoutSignature } from "@/lib/razorpay-signature";
 import { SITE_NAME } from "@/lib/site";
 import { PHONE_FOR_MONEY_MESSAGE, PHONE_ITEM } from "@/lib/profile";
@@ -320,7 +320,7 @@ export async function applyPaymentEvent(
     const open =
       ["REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(match.status) && match.startsAt > now;
     // Open-entry scrims have room while registration is open (lobbies are split at close).
-    const hasRoom = isOpenEntry(match)
+    const hasRoom = takesEveryone(match)
       ? match.status === "REGISTRATION_OPEN"
       : (await slotsTaken(tx, match.id)) < match.maxSlots;
     if (open && hasRoom) {
@@ -332,13 +332,13 @@ export async function applyPaymentEvent(
       return "CONFIRMED";
     }
     // Paid too late: no slot any more. Keep them on the waitlist (if the match still runs) and refund.
-    if (open && !isOpenEntry(match))
+    if (open && !takesEveryone(match))
       await tx.registration.update({
         where: { id: reg.id },
         data: { status: "WAITLISTED", cancelledAt: null },
       });
     toRefund = await markRefund(tx, payment.id, "No slot available when payment completed");
-    return open && !isOpenEntry(match) ? "WAITLISTED_REFUNDED" : "REFUNDED";
+    return open && !takesEveryone(match) ? "WAITLISTED_REFUNDED" : "REFUNDED";
   });
   if (toRefund) await executeRefunds([toRefund]);
   await Promise.all(events.map(notify));

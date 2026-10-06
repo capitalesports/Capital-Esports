@@ -21,6 +21,7 @@ import { db } from "@/server/db";
 import { paymentsEnabled } from "@/server/env";
 import {
   bracketRounds,
+  bracketState,
   getTournamentMatches,
   lobbyStandingsFor,
 } from "@/server/services/tournament-queries";
@@ -56,6 +57,10 @@ export default async function AdminTournamentPage({
     getTournamentMatches(t.id),
   ]);
   const standings = t.format === "LOBBY_POINTS" ? await lobbyStandingsFor(db, t.id) : [];
+  const bracket =
+    t.format === "BRACKET" && t.entryMatchId && matches.length
+      ? await bracketState(db, t.entryMatchId, t.id)
+      : null;
   const confirmed = entry?.registrations.filter((r) => r.status === "CONFIRMED").length ?? 0;
   const allDone =
     matches.length > 0 &&
@@ -72,9 +77,8 @@ export default async function AdminTournamentPage({
         description={
           <span className="inline-flex flex-wrap items-center gap-2">
             <GameBadge game={t.game} /> {MODE_LABEL[t.mode]} ·{" "}
-            {t.format === "BRACKET" ? `${t.bracketSize}-entry bracket` : "Lobby points"} · starts{" "}
-            {formatIST(t.startsAt)} · prize {formatINR(t.prizePoolPaise)} · entry{" "}
-            {formatEntryFee(entry?.entryFeePaise ?? 0)}
+            {t.format === "BRACKET" ? "Bracket" : "Lobby points"} · starts {formatIST(t.startsAt)} ·
+            prize {formatINR(t.prizePoolPaise)} · entry {formatEntryFee(entry?.entryFeePaise ?? 0)}
           </span>
         }
       />
@@ -100,7 +104,6 @@ export default async function AdminTournamentPage({
                     game: t.game,
                     mode: t.mode,
                     startsAt: utcToIstInput(t.startsAt),
-                    size: t.format === "BRACKET" ? String(t.bracketSize ?? 8) : "",
                     entryFee: paiseToRupeesInput(entry?.entryFeePaise ?? 0),
                   }
                 : undefined
@@ -117,7 +120,6 @@ export default async function AdminTournamentPage({
             <GenerateBracketForm
               tournamentId={t.id}
               defaultStart={utcToIstInput(t.startsAt)}
-              size={t.bracketSize ?? 8}
               confirmed={confirmed}
             />
           ) : null}
@@ -132,8 +134,7 @@ export default async function AdminTournamentPage({
           {!cancelled && !t.winnersPublishedAt ? (
             hasResultsPending ? (
               <p className="text-muted-foreground text-sm">
-                To cancel this tournament, first approve the results of matches waiting for
-                results.
+                To cancel this tournament, first approve the results of matches waiting for results.
               </p>
             ) : (
               <CancelTournamentForm tournamentId={t.id} />
@@ -167,8 +168,8 @@ export default async function AdminTournamentPage({
       </div>
       <section className="mt-8 space-y-3" aria-label="Matches">
         <h2 className="text-lg font-semibold">{t.format === "BRACKET" ? "Bracket" : "Matches"}</h2>
-        {t.format === "BRACKET" && t.bracketSize && matches.length ? (
-          <BracketView rounds={bracketRounds(t.bracketSize, matches)} linkBase="/admin/matches" />
+        {bracket ? (
+          <BracketView rounds={bracketRounds(bracket, matches)} linkBase="/admin/matches" />
         ) : (
           <TournamentSchedule matches={matches} linkBase="/admin/matches" />
         )}

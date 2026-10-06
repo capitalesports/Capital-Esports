@@ -154,7 +154,8 @@ export async function eraseAccount(userId: string, approvedById: string, now = n
       match: { status: { in: [...UNFINISHED_MATCH] } },
     },
   });
-  if (rosterSpots || ownRegs.some((r) => !canCancelRegistration(r.match, now))) {
+  // Deletion follows the registration window only: paid entries are refunded below (M39).
+  if (rosterSpots || ownRegs.some((r) => !canCancelRegistration({ ...r.match, entryFeePaise: 0 }, now))) {
     throw new AppError(
       "CONFLICT",
       "The player is in a match that can no longer be cancelled (or on a team roster). Approve after it ends.",

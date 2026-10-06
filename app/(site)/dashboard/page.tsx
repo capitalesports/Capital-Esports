@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { GameBadge } from "@/components/game/game-badge";
 import { RoomPanel } from "@/components/match/room-panel";
 import { StatusPill } from "@/components/match/status-pill";
+import { BracketView } from "@/components/tournament/tournament-views";
 import { MatchHistoryList } from "@/components/profile/match-history-list";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { PushOptIn } from "@/components/pwa/push-opt-in";
@@ -16,7 +17,13 @@ import { getMatchHistory, getMyWinnings, getResultsToSubmit } from "@/server/que
 import { getMyMatches } from "@/server/queries/matches";
 import { myPointsByGame } from "@/server/queries/points";
 import { getMyTeams } from "@/server/services/teams";
+import {
+  bracketRounds,
+  bracketState,
+  getTournamentMatches,
+} from "@/server/services/tournament-queries";
 import { GAME_CONFIG } from "@/lib/games";
+import { lobbyWord } from "@/lib/lobbies";
 import { MODE_LABEL } from "@/lib/match-modes";
 import { formatINR } from "@/lib/money";
 import { isProfileComplete } from "@/lib/profile";
@@ -52,8 +59,30 @@ export default async function DashboardPage() {
   const history = await getMatchHistory(user.id, {
     excludeMatchIds: toSubmit.map((r) => r.match.id),
   });
-  const upcoming = entries.filter((e) =>
-    ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE"].includes(e.match.status),
+  const upcoming = entries.filter(
+    (e) =>
+      ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE"].includes(e.match.status) &&
+      // A lobby tournament's sign-up is replaced by the player's lobby matches once it closes.
+      !(
+        e.match.isEntryList &&
+        e.match.status === "REGISTRATION_CLOSED" &&
+        e.match.tournament?.format === "LOBBY_POINTS"
+      ),
+  );
+  // Bracket tournaments: once registration closes the bracket shows under the sign-up (M50).
+  const brackets = new Map(
+    await Promise.all(
+      upcoming
+        .filter((e) => e.match.isEntryList && e.match.status === "REGISTRATION_CLOSED")
+        .flatMap((e) => (e.match.tournament?.format === "BRACKET" ? [e.match.tournament] : []))
+        .map(async (t) => {
+          const [state, matches] = await Promise.all([
+            bracketState(db, t.entryMatchId!, t.id),
+            getTournamentMatches(t.id),
+          ]);
+          return [t.id, matches.length ? bracketRounds(state, matches) : null] as const;
+        }),
+    ),
   );
   const optedIn = (
     await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { pushOptIn: true } })
@@ -157,38 +186,53 @@ export default async function DashboardPage() {
               const signUp = e.match.isEntryList;
               const teamName = e.team?.name ?? e.teamName;
               return (
-              <article key={e.id} className="card-ds space-y-3 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <GameBadge game={e.match.game} />
-                  {signUp ? (
-                    <span className="text-gold text-xs font-semibold">Tournament</span>
-                  ) : (
-                    <StatusPill status={e.match.status} />
-                  )}
-                  <span className="text-muted-foreground text-xs">{ENTRY_LABEL[e.status]}</span>
-                </div>
-                <h3 className="font-semibold">
-                  <Link
-                    href={
-                      signUp
-                        ? `/tournament/${GAME_CONFIG[e.match.game].slug}`
-                        : `/scrims/${e.match.id}`
-                    }
-                    className="hover:underline"
-                  >
-                    {signUp ? (e.match.tournament?.title ?? e.match.title) : e.match.title}
-                  </Link>
-                </h3>
-                <p className="text-muted-foreground text-sm">
-                  {formatIST(e.match.startsAt)} · {MODE_LABEL[e.match.mode]}
-                  {teamName ? ` · ${teamName}` : ""}
-                </p>
-                {!signUp &&
-                e.status === "CONFIRMED" &&
-                (e.userId === user.id || e.members[0]?.status === "CONFIRMED") ? (
-                  <RoomPanel matchId={e.match.id} />
-                ) : null}
-              </article>
+                <article key={e.id} className="card-ds space-y-3 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <GameBadge game={e.match.game} />
+                    {signUp ? (
+                      <span className="text-gold text-xs font-semibold">Tournament</span>
+                    ) : (
+                      <StatusPill status={e.match.status} />
+                    )}
+                    {e.match.lobbyNumber !== null ? (
+                      <span className="text-gold text-xs font-semibold">
+                        {lobbyWord(e.match.mode)} {e.match.lobbyNumber}
+                      </span>
+                    ) : null}
+                    <span className="text-muted-foreground text-xs">{ENTRY_LABEL[e.status]}</span>
+                  </div>
+                  <h3 className="font-semibold">
+                    <Link
+                      href={
+                        signUp
+                          ? `/tournament/${GAME_CONFIG[e.match.game].slug}`
+                          : `/scrims/${e.match.id}`
+                      }
+                      className="hover:underline"
+                    >
+                      {signUp ? (e.match.tournament?.title ?? e.match.title) : e.match.title}
+                    </Link>
+                  </h3>
+                  <p className="text-muted-foreground text-sm">
+                    {formatIST(e.match.startsAt)} · {MODE_LABEL[e.match.mode]}
+                    {teamName ? ` · ${teamName}` : ""}
+                  </p>
+                  {signUp && e.match.status !== "REGISTRATION_CLOSED" ? (
+                    <p className="text-muted-foreground text-sm">
+                      {e.match._count.registrations} slots booked. Your{" "}
+                      {e.match.tournament?.format === "BRACKET" ? "bracket" : "lobby number"} shows
+                      here when registration closes.
+                    </p>
+                  ) : null}
+                  {signUp && e.match.tournament && brackets.get(e.match.tournament.id) ? (
+                    <BracketView rounds={brackets.get(e.match.tournament.id)!} linkBase="/scrims" />
+                  ) : null}
+                  {!signUp &&
+                  e.status === "CONFIRMED" &&
+                  (e.userId === user.id || e.members[0]?.status === "CONFIRMED") ? (
+                    <RoomPanel matchId={e.match.id} />
+                  ) : null}
+                </article>
               );
             })}
           </div>

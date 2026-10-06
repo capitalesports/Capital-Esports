@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { runMatchStatusJob } from "@/server/jobs/match-status-job";
+import { registerForMatch } from "@/server/services/registration";
 import { approveResults, reopenResults, saveResultRows } from "@/server/services/results";
 import {
   getCurrentTournaments,
+  getTournamentLobbies,
   listPastTournaments,
   lobbyStandingsFor,
 } from "@/server/services/tournament-queries";
@@ -98,32 +101,17 @@ describe("tournament admin guards and validation", () => {
     }
   });
 
-  it("validates format-specific fields and one tournament per game per week", async () => {
+  it("validates the form and allows one tournament per game, mode and week", async () => {
     await expect(
       createTournament(admin, {
-        game: "VALORANT",
-        mode: "FIVE_V_FIVE",
-        title: "Val Cup",
+        game: "BGMI",
+        mode: "SQUAD",
+        title: "X",
         startsAt: inDays(2),
         prizePool: "5000",
       }),
-    ).rejects.toMatchObject({
-      code: "VALIDATION",
-      fieldErrors: { bracketSize: expect.any(Array) },
-    });
-    await expect(
-      createTournament(admin, {
-        game: "VALORANT",
-        mode: "FIVE_V_FIVE",
-        title: "Val Cup",
-        startsAt: inDays(2),
-        prizePool: "5000",
-        bracketSize: 12,
-      }),
-    ).rejects.toMatchObject({
-      code: "VALIDATION",
-    });
-    // No max field: a lobby tournament takes a full lobby (BGMI squads: 25).
+    ).rejects.toMatchObject({ code: "VALIDATION", fieldErrors: { title: expect.any(Array) } });
+    // No max field: sign-ups are uncapped; maxSlots is one lobby (BGMI squads: 25).
     const t = await createTournament(admin, {
       game: "BGMI",
       mode: "SQUAD",
@@ -163,7 +151,7 @@ describe("tournament admin guards and validation", () => {
     expect(solo.mode).toBe("SOLO");
   });
 
-  it("takes the mode from the form: head-to-head modes make a bracket, modes must fit the game", async () => {
+  it("takes the mode from the form: head-to-head modes make a bracket of any size, modes must fit the game", async () => {
     await expect(
       createTournament(admin, {
         game: "VALORANT",
@@ -183,7 +171,6 @@ describe("tournament admin guards and validation", () => {
         title: "BGMI Cup",
         startsAt: inDays(2),
         prizePool: "0",
-        bracketSize: 8,
       }),
     ).rejects.toMatchObject({
       code: "VALIDATION",
@@ -195,20 +182,190 @@ describe("tournament admin guards and validation", () => {
       title: "FF 1v1 Cup",
       startsAt: inDays(2),
       prizePool: "0",
-      bracketSize: 8,
     });
-    expect(t).toMatchObject({ format: "BRACKET", mode: "ONE_V_ONE", bracketSize: 8 });
-    const entry = await testDb().match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
-    expect(entry).toMatchObject({ mode: "ONE_V_ONE", maxSlots: 8 });
+    expect(t).toMatchObject({ format: "BRACKET", mode: "ONE_V_ONE", bracketSize: null });
     const duo = await createTournament(admin, {
       game: "VALORANT",
       mode: "TWO_V_TWO",
       title: "Val 2v2",
       startsAt: inDays(2),
       prizePool: "0",
-      bracketSize: 16,
     });
     expect(duo).toMatchObject({ format: "BRACKET", mode: "TWO_V_TWO" });
+    // Valorant Deathmatch (solo) is a lobby tournament of 10 (DECISIONS M50).
+    const dm = await createTournament(admin, {
+      game: "VALORANT",
+      mode: "SOLO",
+      title: "Val Deathmatch",
+      startsAt: inDays(2),
+      prizePool: "0",
+    });
+    expect(dm).toMatchObject({ format: "LOBBY_POINTS", mode: "SOLO" });
+    const dmEntry = await testDb().match.findUniqueOrThrow({ where: { id: dm.entryMatchId! } });
+    expect(dmEntry.maxSlots).toBe(10);
+  });
+});
+
+/** Confirmed solo sign-ups straight in the database (registration itself is tested elsewhere). */
+async function enterSolos(entryMatchId: string, game: "FREE_FIRE" | "VALORANT", count: number) {
+  const players = [];
+  for (let i = 0; i < count; i++) {
+    const p = await createPlayer(game);
+    await testDb().registration.create({
+      data: { matchId: entryMatchId, userId: p.id, status: "CONFIRMED", position: i + 1 },
+    });
+    players.push(p);
+  }
+  return players;
+}
+
+describe("lobby tournaments (DECISIONS M50)", () => {
+  it("takes unlimited sign-ups and splits 52 Free Fire solos into 26 + 26, the same lobby every match", async () => {
+    const t = await createTournament(admin, {
+      game: "FREE_FIRE",
+      mode: "SOLO",
+      title: "FF Solo Cup",
+      startsAt: inDays(1),
+      prizePool: "1000",
+    });
+    const players = await enterSolos(t.entryMatchId!, "FREE_FIRE", 51);
+    // The 52nd player still gets a confirmed slot: one lobby holds 48, sign-ups are uncapped.
+    const late = await createPlayer("FREE_FIRE");
+    await registerForMatch({ id: late.id, role: "PLAYER" }, { matchId: t.entryMatchId! });
+    expect(
+      (await testDb().registration.findFirstOrThrow({ where: { userId: late.id } })).status,
+    ).toBe("CONFIRMED");
+    players.push(late);
+
+    const matches = await addLobbyMatches(admin, {
+      tournamentId: t.id,
+      count: 2,
+      firstStartsAt: inDays(1),
+      gapMinutes: 45,
+    });
+    expect(await lockEntries(admin, { tournamentId: t.id })).toEqual({
+      teams: 52,
+      matches: 2,
+      lobbies: 4,
+    });
+    // Idempotent.
+    expect(await lockEntries(admin, { tournamentId: t.id })).toMatchObject({ lobbies: 4 });
+
+    const lobbies = await testDb().match.findMany({
+      where: { tournamentId: t.id, isEntryList: false },
+      orderBy: [{ startsAt: "asc" }, { lobbyNumber: "asc" }],
+      include: { registrations: { orderBy: { position: "asc" } } },
+    });
+    expect(lobbies.map((m) => [m.title, m.lobbyNumber, m.registrations.length, m.status])).toEqual([
+      ["FF Solo Cup — Match 1 — Lobby 1", 1, 26, "REGISTRATION_CLOSED"],
+      ["FF Solo Cup — Match 1 — Lobby 2", 2, 26, "REGISTRATION_CLOSED"],
+      ["FF Solo Cup — Match 2 — Lobby 1", 1, 26, "REGISTRATION_CLOSED"],
+      ["FF Solo Cup — Match 2 — Lobby 2", 2, 26, "REGISTRATION_CLOSED"],
+    ]);
+    expect(lobbies[1]!.parentMatchId).toBe(matches[0]!.id);
+    expect(lobbies[3]!.parentMatchId).toBe(matches[1]!.id);
+    // Same players in lobby 2 of both matches.
+    const ids = (i: number) => lobbies[i]!.registrations.map((r) => r.userId).sort();
+    expect(ids(1)).toEqual(ids(3));
+    expect(ids(1)).toEqual(
+      players
+        .slice(26)
+        .map((p) => p.id)
+        .sort(),
+    );
+
+    // One bell per player: "You're in Lobby N", pointing at the first match's lobby.
+    const notes = await testDb().notification.findMany({ where: { type: "TOURNAMENT_LOBBY" } });
+    expect(notes).toHaveLength(52);
+    expect(notes.find((n) => n.userId === players[51]!.id)?.title).toBe("You're in Lobby 2");
+
+    // The tournament page lists each lobby once (not per match) and finds the viewer's lobby.
+    const view = await getTournamentLobbies(t.id, players[51]!.id);
+    expect(view.lobbies.map((l) => [l.lobby, l.names.length])).toEqual([
+      [1, 26],
+      [2, 26],
+    ]);
+    expect(view.mine).toBe(2);
+    expect((await getTournamentLobbies(t.id, null)).mine).toBeNull();
+  });
+
+  it("closes registration from the status job and creates Match 1 when no match was added", async () => {
+    const t = await createTournament(admin, {
+      game: "FREE_FIRE",
+      mode: "SOLO",
+      title: "FF Auto Cup",
+      startsAt: inDays(1),
+      prizePool: "0",
+    });
+    await enterSolos(t.entryMatchId!, "FREE_FIRE", 12);
+    await runMatchStatusJob(new Date(t.startsAt.getTime() - 29 * 60_000));
+    const entry = await testDb().match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
+    expect(entry.status).toBe("REGISTRATION_CLOSED");
+    const [m1, ...rest] = await testDb().match.findMany({
+      where: { tournamentId: t.id, isEntryList: false },
+      include: { registrations: true },
+    });
+    expect(rest).toHaveLength(0);
+    expect(m1).toMatchObject({
+      title: "FF Auto Cup — Match 1",
+      lobbyNumber: 1,
+      status: "REGISTRATION_CLOSED",
+      startsAt: t.startsAt,
+    });
+    expect(m1!.registrations).toHaveLength(12);
+    // A later run doesn't split again or cancel the match for having no registrations of its own.
+    await runMatchStatusJob(new Date(t.startsAt.getTime() - 20 * 60_000));
+    expect(await testDb().match.count({ where: { tournamentId: t.id, isEntryList: false } })).toBe(
+      1,
+    );
+    expect(await testDb().notification.count({ where: { type: "TOURNAMENT_LOBBY" } })).toBe(12);
+  });
+
+  it("Valorant Deathmatch: lobbies of 10; players who fit no lobby are removed and told", async () => {
+    const t = await createTournament(admin, {
+      game: "VALORANT",
+      mode: "SOLO",
+      title: "Val Deathmatch",
+      startsAt: inDays(1),
+      prizePool: "0",
+    });
+    const players = await enterSolos(t.entryMatchId!, "VALORANT", 12);
+    await lockEntries(admin, { tournamentId: t.id });
+    const [lobby] = await testDb().match.findMany({
+      where: { tournamentId: t.id, isEntryList: false },
+      include: { registrations: true },
+    });
+    expect(lobby!.registrations).toHaveLength(10);
+    const out = players.slice(10).map((p) => p.id);
+    expect(
+      await testDb().registration.count({
+        where: { matchId: t.entryMatchId!, userId: { in: out }, status: "CANCELLED" },
+      }),
+    ).toBe(2);
+    expect(
+      await testDb().notification.count({
+        where: { type: "TOURNAMENT_UNPLACED", userId: { in: out } },
+      }),
+    ).toBe(2);
+  });
+
+  it("sends the sign-up confirmation with the dashboard line (no lobby number)", async () => {
+    const t = await createTournament(admin, {
+      game: "FREE_FIRE",
+      mode: "SOLO",
+      title: "FF Mail Cup",
+      startsAt: inDays(1),
+      prizePool: "0",
+    });
+    const p = await createPlayer("FREE_FIRE");
+    await registerForMatch({ id: p.id, role: "PLAYER" }, { matchId: t.entryMatchId! });
+    const note = await testDb().notification.findFirstOrThrow({
+      where: { userId: p.id, type: "REGISTRATION_CONFIRMED" },
+    });
+    expect(note.body).toContain(
+      "After registration closes, check your lobby number on the dashboard.",
+    );
+    expect(note.url).toBe("/dashboard");
   });
 });
 
@@ -224,9 +381,6 @@ describe("BGMI lobby-points tournament", () => {
     const alpha = await enterTeam(t.entryMatchId!, "BGMI", "Alpha", 1);
     const bravo = await enterTeam(t.entryMatchId!, "BGMI", "Bravo", 2);
     const charlie = await enterTeam(t.entryMatchId!, "BGMI", "Charlie", 3);
-    await expect(lockEntries(admin, { tournamentId: t.id })).rejects.toMatchObject({
-      code: "CONFLICT",
-    }); // no lobby matches yet
     const matches = await addLobbyMatches(admin, {
       tournamentId: t.id,
       count: 3,
@@ -239,14 +393,18 @@ describe("BGMI lobby-points tournament", () => {
       "BGMI Weekly — Match 3",
     ]);
 
-    expect(await lockEntries(admin, { tournamentId: t.id })).toEqual({ teams: 3, matches: 3 });
-    expect(await lockEntries(admin, { tournamentId: t.id })).toEqual({ teams: 3, matches: 3 }); // idempotent
+    expect(await lockEntries(admin, { tournamentId: t.id })).toEqual({
+      teams: 3,
+      matches: 3,
+      lobbies: 3,
+    });
     for (const m of matches) {
       const row = await testDb().match.findUniqueOrThrow({
         where: { id: m.id },
         include: { registrations: true, rosterEntries: true },
       });
       expect(row.status).toBe("REGISTRATION_CLOSED");
+      expect(row.title).toBe(m.title); // one lobby: no "— Lobby 1" suffix
       expect(row.registrations.filter((r) => r.status === "CONFIRMED")).toHaveLength(3);
       expect(row.rosterEntries).toHaveLength(12);
     }
@@ -319,159 +477,151 @@ describe("BGMI lobby-points tournament", () => {
   });
 });
 
-describe("Valorant 8-team bracket", () => {
-  it("advances winners automatically to a champion", async () => {
-    const t = await createTournament(admin, {
+describe("Valorant bracket with byes (DECISIONS M50)", () => {
+  const valCup = () =>
+    createTournament(admin, {
       game: "VALORANT",
       mode: "FIVE_V_FIVE",
       title: "Val Cup",
       startsAt: inDays(2),
       prizePool: "8000",
-      bracketSize: 8,
     });
-    const names = ["S1", "S2", "S3", "S4", "S5", "S6", "S7"];
-    for (const [i, n] of names.entries()) await enterTeam(t.entryMatchId!, "VALORANT", n, i + 1);
+  const sidesOf = async (matchId: string) =>
+    (
+      await testDb().registration.findMany({
+        where: { matchId },
+        orderBy: { position: "asc" },
+        include: { team: true },
+      })
+    ).map((r) => ({ id: r.id, name: r.team!.name }));
+  const namesOf = async (matchId: string) => (await sidesOf(matchId)).map((s) => s.name);
+  const roundOf = async (tournamentId: string, round: number) =>
+    testDb().match.findMany({
+      where: { tournamentId, bracketRound: round },
+      orderBy: { bracketIndex: "asc" },
+    });
+
+  /** Approve a bracket match with the lower seed number winning; round diff = loser's seed. */
+  async function play(matchId: string) {
+    await toResultsPending(matchId);
+    const sides = await sidesOf(matchId);
+    const seed = (s: { name: string }) => Number(s.name.slice(1));
+    const winner = sides.reduce((a, b) => (seed(a) < seed(b) ? a : b));
+    const loser = sides.find((s) => s.id !== winner.id)!;
+    await saveResultRows(mod, {
+      matchId,
+      rows: sides.map((s) => ({
+        registrationId: s.id,
+        won: s.id === winner.id,
+        roundDiff: s.id === winner.id ? seed(loser) : -seed(loser),
+      })),
+    });
+    await approveResults(mod, { matchId });
+  }
+
+  it("8 teams pair in sign-up order and play to a champion", async () => {
+    const t = await valCup();
+    await enterTeam(t.entryMatchId!, "VALORANT", "S1", 1);
     await expect(
       generateBracket(admin, { tournamentId: t.id, firstRoundStartsAt: inDays(2) }),
-    ).rejects.toMatchObject({
-      code: "VALIDATION",
-      message: expect.stringContaining("exactly 8"),
-    });
-    // The failed attempt rolled back, so the sign-up list is still open; add the 8th team.
-    await enterTeam(t.entryMatchId!, "VALORANT", "S8", 8);
+    ).rejects.toMatchObject({ code: "VALIDATION", message: expect.stringContaining("at least 2") });
+    for (let i = 2; i <= 8; i++) await enterTeam(t.entryMatchId!, "VALORANT", `S${i}`, i);
     const round1 = await generateBracket(admin, {
       tournamentId: t.id,
       firstRoundStartsAt: inDays(2),
     });
-    expect(round1).toHaveLength(4);
     await expect(
       generateBracket(admin, { tournamentId: t.id, firstRoundStartsAt: inDays(2) }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
-
-    const sidesOf = async (matchId: string) =>
-      (
-        await testDb().registration.findMany({
-          where: { matchId },
-          orderBy: { position: "asc" },
-          include: { team: true },
-        })
-      ).map((r) => ({ id: r.id, name: r.team!.name }));
-    expect(
-      await Promise.all(round1.map((m) => sidesOf(m.id).then((s) => s.map((x) => x.name)))),
-    ).toEqual([
-      ["S1", "S8"],
-      ["S4", "S5"],
-      ["S2", "S7"],
-      ["S3", "S6"],
+    expect(await Promise.all(round1.map((m) => namesOf(m.id)))).toEqual([
+      ["S1", "S2"],
+      ["S3", "S4"],
+      ["S5", "S6"],
+      ["S7", "S8"],
     ]);
+    expect(round1[0]!.title).toBe("Val Cup — Quarterfinals, game 1");
 
-    /** Approve a bracket match with the lower seed number winning. */
-    async function play(matchId: string) {
-      await toResultsPending(matchId);
-      const sides = await sidesOf(matchId);
-      const seed = (s: { name: string }) => Number(s.name.slice(1));
-      const winner = sides.reduce((a, b) => (seed(a) < seed(b) ? a : b));
-      const loser = sides.find((s) => s.id !== winner.id)!;
-      // Round difference = loser's seed number, so the better-seeded semifinal loser takes 3rd.
-      await saveResultRows(mod, {
-        matchId,
-        rows: sides.map((s) => ({
-          registrationId: s.id,
-          won: s.id === winner.id,
-          roundDiff: s.id === winner.id ? seed(loser) : -seed(loser),
-        })),
-      });
-      await approveResults(mod, { matchId });
-    }
-    const matchAt = (round: number, index: number) =>
-      testDb().match.findFirst({
-        where: { tournamentId: t.id, bracketRound: round, bracketIndex: index },
-      });
-
-    await play(round1[0]!.id);
-    expect(await matchAt(2, 0)).toBeNull(); // sibling not decided yet
-    await play(round1[1]!.id);
-    const semi1 = (await matchAt(2, 0))!;
-    expect((await sidesOf(semi1.id)).map((s) => s.name)).toEqual(["S1", "S4"]);
-    expect(semi1.status).toBe("REGISTRATION_CLOSED");
-    await play(round1[2]!.id);
+    for (const m of round1.slice(0, 3)) await play(m.id);
+    expect(await roundOf(t.id, 2)).toHaveLength(0); // round 1 not finished yet
     await play(round1[3]!.id);
-    const semi2 = (await matchAt(2, 1))!;
-    expect((await sidesOf(semi2.id)).map((s) => s.name)).toEqual(["S2", "S3"]);
+    const semis = await roundOf(t.id, 2);
+    expect(await Promise.all(semis.map((m) => namesOf(m.id)))).toEqual([
+      ["S1", "S3"],
+      ["S5", "S7"],
+    ]);
+    expect(semis[0]!.status).toBe("REGISTRATION_CLOSED");
 
     await expect(
       publishWinners(admin, { tournamentId: t.id, prizes: ["4000", "2500", "1500"] }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
 
-    await play(semi1.id);
-    await play(semi2.id);
-    const final = (await matchAt(3, 0))!;
-    expect(final.title).toBe("Val Cup — Final");
-    expect((await sidesOf(final.id)).map((s) => s.name)).toEqual(["S1", "S2"]);
-    await play(final.id);
+    for (const m of semis) await play(m.id);
+    const [final] = await roundOf(t.id, 3);
+    expect(final!.title).toBe("Val Cup — Final");
+    expect(await namesOf(final!.id)).toEqual(["S1", "S5"]);
+    await play(final!.id);
 
     await publishWinners(admin, { tournamentId: t.id, prizes: ["4000", "2500", "1500"] });
     const saved = await testDb().tournament.findUniqueOrThrow({ where: { id: t.id } });
-    expect((saved.winners as { name: string }[]).map((w) => w.name)).toEqual(["S1", "S2", "S3"]);
-    expect(
-      (await testDb().carouselItem.findFirstOrThrow({ where: { tournamentId: t.id } })).title,
-    ).toBe("S1 won Val Cup");
+    // 3rd: the semifinal loser with the better round difference (S3 lost by 3, S7 by 7).
+    expect((saved.winners as { name: string }[]).map((w) => w.name)).toEqual(["S1", "S5", "S3"]);
   });
 
-  it("reopening a bracket match takes the advanced side out of the next round (until it starts)", async () => {
-    const t = await createTournament(admin, {
-      game: "VALORANT",
-      mode: "FIVE_V_FIVE",
-      title: "Val Cup",
-      startsAt: inDays(2),
-      prizePool: "0",
-      bracketSize: 8,
-    });
+  it("9 teams: the 9th gets a bye to round 2, which has 5 teams and gives another bye", async () => {
+    const t = await valCup();
+    for (let i = 1; i <= 9; i++) await enterTeam(t.entryMatchId!, "VALORANT", `S${i}`, i);
+    // Registration closes 30 minutes before the start: the status job draws the bracket.
+    await runMatchStatusJob(new Date(t.startsAt.getTime() - 29 * 60_000));
+    const round1 = await roundOf(t.id, 1);
+    expect(await Promise.all(round1.map((m) => namesOf(m.id)))).toEqual([
+      ["S1", "S2"],
+      ["S3", "S4"],
+      ["S5", "S6"],
+      ["S7", "S8"],
+    ]);
+    expect(round1[0]!.startsAt).toEqual(t.startsAt);
+    const ready = await testDb().notification.findMany({ where: { type: "BRACKET_READY" } });
+    expect(ready).toHaveLength(9 * 5); // every player, the team with the bye included
+
+    for (const m of round1) await play(m.id);
+    const round2 = await roundOf(t.id, 2);
+    // S9 (bye) first, then the winners: S9 v S1, S3 v S5, S7 has the bye.
+    expect(await Promise.all(round2.map((m) => namesOf(m.id)))).toEqual([
+      ["S9", "S1"],
+      ["S3", "S5"],
+    ]);
+    for (const m of round2) await play(m.id);
+    const round3 = await roundOf(t.id, 3);
+    expect(await Promise.all(round3.map((m) => namesOf(m.id)))).toEqual([["S7", "S1"]]);
+    await play(round3[0]!.id);
+    const [final] = await roundOf(t.id, 4);
+    expect(final!.title).toBe("Val Cup — Final");
+    expect(await namesOf(final!.id)).toEqual(["S3", "S1"]);
+    await play(final!.id);
+
+    await publishWinners(admin, { tournamentId: t.id, prizes: ["4000", "2500", "1500"] });
+    const saved = await testDb().tournament.findUniqueOrThrow({ where: { id: t.id } });
+    expect((saved.winners as { name: string }[]).map((w) => w.name)).toEqual(["S1", "S3", "S7"]);
+  });
+
+  it("reopening a decided round removes the next round (until it starts)", async () => {
+    const t = await valCup();
     for (let i = 1; i <= 8; i++) await enterTeam(t.entryMatchId!, "VALORANT", `S${i}`, i);
     const round1 = await generateBracket(admin, {
       tournamentId: t.id,
       firstRoundStartsAt: inDays(2),
     });
-    const names = async (matchId: string) =>
-      (
-        await testDb().registration.findMany({
-          where: { matchId },
-          orderBy: { position: "asc" },
-          include: { team: true },
-        })
-      ).map((r) => r.team!.name);
-    /** First side wins. */
-    async function play(matchId: string) {
-      await toResultsPending(matchId);
-      const regs = await testDb().registration.findMany({
-        where: { matchId },
-        orderBy: { position: "asc" },
-      });
-      await saveResultRows(mod, {
-        matchId,
-        rows: regs.map((r, i) => ({ registrationId: r.id, won: i === 0, roundDiff: 0 })),
-      });
-      await approveResults(mod, { matchId });
-    }
-    const semi = () =>
-      testDb().match.findFirst({ where: { tournamentId: t.id, bracketRound: 2, bracketIndex: 0 } });
-
-    await play(round1[0]!.id);
-    await play(round1[1]!.id);
-    expect(await names((await semi())!.id)).toEqual(["S1", "S4"]);
+    for (const m of round1) await play(m.id);
+    expect(await roundOf(t.id, 2)).toHaveLength(2);
 
     await reopenResults(mod, { matchId: round1[0]!.id, reason: "wrong winner" });
-    expect(await names((await semi())!.id)).toEqual(["S4"]);
-    await reopenResults(mod, { matchId: round1[1]!.id });
-    expect(await semi()).toBeNull();
-
+    expect(await roundOf(t.id, 2)).toHaveLength(0);
     await approveResults(mod, { matchId: round1[0]!.id });
-    await approveResults(mod, { matchId: round1[1]!.id });
-    const again = (await semi())!;
-    expect(await names(again.id)).toEqual(["S1", "S4"]);
+    const again = await roundOf(t.id, 2);
+    expect(await namesOf(again[0]!.id)).toEqual(["S1", "S3"]);
 
     // Once the next round has started, reopening is refused.
-    await testDb().match.update({ where: { id: again.id }, data: { status: "LIVE" } });
+    await testDb().match.update({ where: { id: again[0]!.id }, data: { status: "LIVE" } });
     await expect(reopenResults(admin, { matchId: round1[0]!.id })).rejects.toMatchObject({
       code: "CONFLICT",
       message: expect.stringContaining("already started"),
@@ -479,20 +629,13 @@ describe("Valorant 8-team bracket", () => {
   });
 
   it("a walkover (one side absent) advances the side that showed up", async () => {
-    const t = await createTournament(admin, {
-      game: "VALORANT",
-      mode: "FIVE_V_FIVE",
-      title: "Val Cup",
-      startsAt: inDays(2),
-      prizePool: "0",
-      bracketSize: 8,
-    });
+    const t = await valCup();
     for (let i = 1; i <= 8; i++) await enterTeam(t.entryMatchId!, "VALORANT", `S${i}`, i);
-    const [m0, m1] = await generateBracket(admin, {
+    const round1 = await generateBracket(admin, {
       tournamentId: t.id,
       firstRoundStartsAt: inDays(2),
     });
-    for (const m of [m0!, m1!]) {
+    for (const m of round1.slice(0, 2)) {
       await toResultsPending(m.id);
       const regs = await testDb().registration.findMany({
         where: { matchId: m.id },
@@ -507,11 +650,9 @@ describe("Valorant 8-team bracket", () => {
       });
       await approveResults(mod, { matchId: m.id });
     }
-    const semi = await testDb().match.findFirstOrThrow({
-      where: { tournamentId: t.id, bracketRound: 2, bracketIndex: 0 },
-      include: { registrations: { include: { team: true }, orderBy: { position: "asc" } } },
-    });
-    expect(semi.registrations.map((r) => r.team!.name)).toEqual(["S8", "S5"]);
+    for (const m of round1.slice(2)) await play(m.id);
+    const [semi] = await roundOf(t.id, 2);
+    expect(await namesOf(semi!.id)).toEqual(["S2", "S4"]);
   });
 });
 
@@ -523,7 +664,6 @@ describe("tournament entry fee", () => {
       title: "Paid Val Cup",
       startsAt: inDays(3),
       prizePool: "5000",
-      bracketSize: 8,
       ...(entryFee === undefined ? {} : { entryFee }),
     });
   const entryOf = async (t: { entryMatchId: string | null }) =>
@@ -547,17 +687,31 @@ describe("tournament entry fee", () => {
           name: "Paid Five",
           captainId: captain.id,
           members: {
-            create: [captain, ...mates].map((p) => ({ userId: p.id, game: "VALORANT" as const, status: "CONFIRMED" as const })),
+            create: [captain, ...mates].map((p) => ({
+              userId: p.id,
+              game: "VALORANT" as const,
+              status: "CONFIRMED" as const,
+            })),
           },
         },
       });
       const { registerForMatch, respondToRoster } = await import("@/server/services/registration");
       const actor = (u: { id: string }): Actor => ({ id: u.id, role: "PLAYER" });
-      await registerForMatch(actor(captain), { matchId: t.entryMatchId!, teamId: team.id, memberIds: mates.map((m) => m.id) });
-      for (const m of mates) await respondToRoster(actor(m), { matchId: t.entryMatchId!, accept: true });
-      const reg = await testDb().registration.findFirstOrThrow({ where: { matchId: t.entryMatchId! } });
+      await registerForMatch(actor(captain), {
+        matchId: t.entryMatchId!,
+        teamId: team.id,
+        memberIds: mates.map((m) => m.id),
+      });
+      for (const m of mates)
+        await respondToRoster(actor(m), { matchId: t.entryMatchId!, accept: true });
+      const reg = await testDb().registration.findFirstOrThrow({
+        where: { matchId: t.entryMatchId! },
+      });
       expect(reg.status).toBe("PENDING_PAYMENT");
-      expect((await testDb().payment.findUniqueOrThrow({ where: { registrationId: reg.id } })).amountPaise).toBe(9950);
+      expect(
+        (await testDb().payment.findUniqueOrThrow({ where: { registrationId: reg.id } }))
+          .amountPaise,
+      ).toBe(9950);
     } finally {
       delete process.env.PAYMENTS_ENABLED;
     }
@@ -569,7 +723,9 @@ describe("tournament entry fee", () => {
     await updateTournament(admin, { ...base, entryFee: "75" });
     expect((await entryOf(t)).entryFeePaise).toBe(7500);
     const p = await createPlayer("VALORANT");
-    await testDb().registration.create({ data: { matchId: t.entryMatchId!, userId: p.id, status: "CONFIRMED", position: 1 } });
+    await testDb().registration.create({
+      data: { matchId: t.entryMatchId!, userId: p.id, status: "CONFIRMED", position: 1 },
+    });
     await expect(updateTournament(admin, { ...base, entryFee: "10" })).rejects.toMatchObject({
       code: "CONFLICT",
       fieldErrors: { entryFee: expect.any(Array) },
@@ -605,15 +761,12 @@ describe("several tournaments per game, editing and cancelling", () => {
     expect(await listPastTournaments("BGMI", addDays(new Date(), 30))).toHaveLength(1);
   });
 
-  it("start, mode and size change only while nobody signed up; the sign-up list follows", async () => {
+  it("start and mode change only while nobody signed up; the sign-up list follows", async () => {
     const t = await squadCup();
     const base = { tournamentId: t.id, title: t.title, prizePool: "1000", rulesMarkdown: "" };
-    await expect(
-      updateTournament(admin, { ...base, mode: "FIVE_V_FIVE", bracketSize: 8 }),
-    ).rejects.toMatchObject({ code: "VALIDATION" });
-    await expect(
-      updateTournament(admin, { ...base, mode: "ONE_V_ONE", bracketSize: 12 }),
-    ).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(updateTournament(admin, { ...base, mode: "FIVE_V_FIVE" })).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
     await expect(
       updateTournament(admin, { ...base, startsAt: "not a date" }),
     ).rejects.toMatchObject({ code: "VALIDATION" });
@@ -621,12 +774,11 @@ describe("several tournaments per game, editing and cancelling", () => {
     const after = await updateTournament(admin, {
       ...base,
       mode: "ONE_V_ONE",
-      bracketSize: 16,
       startsAt: inDays(3, "19:00"),
     });
-    expect(after).toMatchObject({ mode: "ONE_V_ONE", format: "BRACKET", bracketSize: 16 });
+    expect(after).toMatchObject({ mode: "ONE_V_ONE", format: "BRACKET", bracketSize: null });
     const entry = await testDb().match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
-    expect(entry).toMatchObject({ mode: "ONE_V_ONE", maxSlots: 16 });
+    expect(entry).toMatchObject({ mode: "ONE_V_ONE", maxSlots: 2 });
     expect(entry.startsAt).toEqual(after.startsAt);
     expect(entry.registrationClosesAt!.getTime()).toBe(after.startsAt.getTime() - 30 * 60_000);
 
@@ -634,13 +786,13 @@ describe("several tournaments per game, editing and cancelling", () => {
     await testDb().registration.create({
       data: { matchId: entry.id, userId: p.id, status: "CONFIRMED", position: 1 },
     });
-    await expect(
-      updateTournament(admin, { ...base, mode: "ONE_V_ONE", bracketSize: 8 }),
-    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(updateTournament(admin, { ...base, mode: "SQUAD" })).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
     // Details without structure changes still save.
-    await expect(
-      updateTournament(admin, { ...base, title: "Renamed Cup" }),
-    ).resolves.toMatchObject({ title: "Renamed Cup" });
+    await expect(updateTournament(admin, { ...base, title: "Renamed Cup" })).resolves.toMatchObject(
+      { title: "Renamed Cup" },
+    );
   });
 
   it("cancelling validates the reason, cancels every open match (sign-up list included) and blocks further steps", async () => {
@@ -652,9 +804,9 @@ describe("several tournaments per game, editing and cancelling", () => {
       firstStartsAt: inDays(2),
       gapMinutes: 45,
     });
-    await expect(cancelTournament(admin, { tournamentId: t.id, reason: "x" })).rejects.toMatchObject(
-      { code: "VALIDATION" },
-    );
+    await expect(
+      cancelTournament(admin, { tournamentId: t.id, reason: "x" }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
     await toResultsPending(lobbies[0]!.id);
     await expect(
       cancelTournament(admin, { tournamentId: t.id, reason: "Server outage" }),

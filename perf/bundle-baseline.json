@@ -15,7 +15,7 @@
     },
     "next-runtime[3]": {
       "label": "Next.js / React runtime",
-      "gzip": 73793
+      "gzip": 73805
     },
     "next-runtime[4]": {
       "label": "Next.js / React runtime",
@@ -23,43 +23,43 @@
     },
     "next-runtime[5]": {
       "label": "Next.js / React runtime",
-      "gzip": 4319
+      "gzip": 4321
     },
     "shared:e4dcf10397": {
       "label": "shared by app/icon--metadata",
       "gzip": 3682
     },
-    "app:75dc021e5f": {
-      "label": "app/(site)/error.tsx, app/admin/announcements/announcement-form.tsx +52",
+    "app:8d4935344a": {
+      "label": "app/(site)/error.tsx, app/admin/announcements/announcement-form.tsx +54",
       "gzip": 2000
     },
-    "app:bbebec61bf": {
+    "app:0c5ad21f36": {
       "label": "app/(site)/error.tsx, components/analytics/page-view-beacon.tsx +31 (2 files)",
-      "gzip": 16169
+      "gzip": 16176
     },
-    "app:ad2fcbc9df": {
-      "label": "app/(site)/error.tsx, app/admin/announcements/announcement-form.tsx +49",
+    "app:163d520217": {
+      "label": "app/(site)/error.tsx, app/admin/announcements/announcement-form.tsx +51",
       "gzip": 8686
     },
     "app:19b8e74c15": {
       "label": "app/global-error.tsx (2 files)",
       "gzip": 4614
     },
-    "app:0325590fd3": {
-      "label": "app/(site)/error.tsx",
-      "gzip": 603
-    },
     "app:5313404146": {
       "label": "components/content/contact-form.tsx",
       "gzip": 3058
     },
-    "app:ec6c116459": {
+    "app:a261df61a2": {
       "label": "components/auth/logout-button.tsx, components/common/intent-link.tsx +16",
       "gzip": 9855
     },
-    "app:adb3b5d2c0": {
-      "label": "components/common/intent-link.tsx, components/match/room-panel.tsx +2",
-      "gzip": 2515
+    "app:0325590fd3": {
+      "label": "app/(site)/error.tsx",
+      "gzip": 603
+    },
+    "app:9ce66140bf": {
+      "label": "components/common/intent-link.tsx, components/match/room-panel.tsx +3",
+      "gzip": 2920
     },
     "app:1e5586415c": {
       "label": "components/common/intent-link.tsx, components/common/share-button.tsx +1 (2 files)",
@@ -67,15 +67,15 @@
     },
     "app:58a2c919db": {
       "label": "components/admin/tournament-forms.tsx, components/common/intent-link.tsx +1 (2 files)",
-      "gzip": 9266
+      "gzip": 9147
     },
     "app:132ec98dbe": {
       "label": "components/auth/login-form.tsx",
-      "gzip": 3366
+      "gzip": 4087
     },
     "app:aaa8788c63": {
       "label": "components/auth/login-form.tsx, components/auth/signup-form.tsx",
-      "gzip": 4985
+      "gzip": 5084
     },
     "app:7618b070f8": {
       "label": "components/common/intent-link.tsx, components/notifications/inbox-list.tsx",
@@ -93,25 +93,25 @@
       "label": "components/common/intent-link.tsx, components/common/report-dialog.tsx",
       "gzip": 5356
     },
-    "app:c702637de9": {
+    "app:17413b02c1": {
       "label": "components/auth/logout-button.tsx, components/common/intent-link.tsx +11",
       "gzip": 12525
     },
-    "app:4edeb422f5": {
+    "app:556e4ba9ea": {
       "label": "components/auth/logout-button.tsx, components/common/intent-link.tsx +5 (2 files)",
-      "gzip": 17654
+      "gzip": 18729
     },
     "app:a479a52cbd": {
       "label": "components/common/intent-link.tsx, components/scrims/filter-form.tsx +2",
-      "gzip": 3563
+      "gzip": 3560
     },
     "app:3f9e5aaf62": {
       "label": "components/common/intent-link.tsx, components/common/report-dialog.tsx +5 (2 files)",
-      "gzip": 11166
+      "gzip": 11617
     },
     "app:1d63c12ae9": {
       "label": "components/auth/signup-form.tsx",
-      "gzip": 6429
+      "gzip": 7115
     },
     "app:cb068a66fe": {
       "label": "components/common/intent-link.tsx, components/teams/team-components.tsx",
@@ -119,23 +119,23 @@
     },
     "app:4fd21bc1f7": {
       "label": "components/common/intent-link.tsx, components/match/registration-panel.tsx +1",
-      "gzip": 3864
+      "gzip": 4343
     },
-    "app:5202167701": {
-      "label": "app/admin/announcements/announcement-form.tsx, app/admin/error.tsx +18",
+    "app:9f7e23af4c": {
+      "label": "app/admin/announcements/announcement-form.tsx, app/admin/error.tsx +20",
       "gzip": 4075
     },
     "app:df4a89766a": {
       "label": "app/admin/error.tsx",
-      "gzip": 3015
+      "gzip": 3022
     },
     "app:d28cc26006": {
       "label": "app/admin/announcements/announcement-form.tsx",
       "gzip": 4056
     },
-    "app:894b98a2e6": {
-      "label": "app/admin/announcements/announcement-form.tsx, app/admin/points/points-form.tsx +14",
-      "gzip": 11817
+    "app:7525d25ec3": {
+      "label": "app/admin/announcements/announcement-form.tsx, app/admin/points/points-form.tsx +16",
+      "gzip": 11825
     },
     "app:56c39ca4fc": {
       "label": "components/common/intent-link.tsx, components/ui/label.tsx +1",
@@ -143,19 +143,23 @@
     },
     "app:ecd0a9f355": {
       "label": "components/admin/contact-message-row.tsx, components/admin/content-editors.tsx",
-      "gzip": 12049
+      "gzip": 12042
+    },
+    "app:a881c0c46c": {
+      "label": "components/admin/deletion-request-actions.tsx, components/common/intent-link.tsx",
+      "gzip": 3509
     },
     "app:beaa676813": {
       "label": "components/admin/match-form.tsx",
-      "gzip": 7376
+      "gzip": 7372
     },
     "app:9159cf79d4": {
       "label": "components/admin/delete-match-button.tsx, components/admin/match-controls.tsx +2",
-      "gzip": 9269
+      "gzip": 9262
     },
-    "app:bd71c9c7eb": {
-      "label": "components/admin/payout-controls.tsx, components/common/intent-link.tsx +1",
-      "gzip": 4872
+    "app:afad7a021a": {
+      "label": "components/admin/payout-controls.tsx, components/admin/refund-controls.tsx +2",
+      "gzip": 5129
     },
     "app:67843ad43d": {
       "label": "app/admin/points/points-form.tsx",
@@ -171,7 +175,7 @@
     },
     "app:e30ac1f43c": {
       "label": "components/admin/results-editor.tsx, components/common/intent-link.tsx",
-      "gzip": 11274
+      "gzip": 12607
     },
     "app:93850e1d96": {
       "label": "components/admin/season-controls.tsx",
@@ -187,7 +191,7 @@
     },
     "app:13b7332914": {
       "label": "components/admin/user-actions.tsx, components/common/intent-link.tsx +1",
-      "gzip": 9481
+      "gzip": 9509
     },
     "app:3a8312bb22": {
       "label": "components/common/intent-link.tsx",
@@ -195,56 +199,57 @@
     }
   },
   "routes": {
-    "/contact": 180087,
-    "/dashboard": 179544,
-    "/faq": 167174,
-    "/games": 167174,
-    "/games/[game]": 167174,
-    "/leaderboard": 167174,
-    "/leaderboard/[game]": 177877,
-    "/leaderboard/[game]/seasons/[id]": 167785,
-    "/login": 175525,
-    "/notifications": 177874,
-    "/": 173169,
-    "/payments/return": 168622,
-    "/payments/stub/[orderId]": 167174,
-    "/players/[id]": 194910,
-    "/privacy": 167174,
-    "/profile": 207208,
-    "/refund-policy": 167174,
-    "/rules": 167174,
-    "/scrims": 170737,
-    "/scrims/[id]": 200720,
-    "/search": 167174,
-    "/signup": 178588,
-    "/teams": 183114,
-    "/teams/[id]": 167174,
-    "/terms": 167174,
-    "/tournament": 167174,
-    "/tournament/[game]": 180893,
-    "/tournament/[game]/past": 167174,
-    "/admin/announcements": 173365,
-    "/admin/audit": 159744,
-    "/admin/content": 181358,
-    "/admin/matches/new": 176685,
-    "/admin/matches": 159744,
-    "/admin/matches/[id]/edit": 176685,
-    "/admin/matches/[id]": 178578,
-    "/admin": 157492,
-    "/admin/payouts": 174181,
-    "/admin/points": 173061,
-    "/admin/reports": 170597,
-    "/admin/results": 171887,
-    "/admin/results/[matchId]": 180583,
-    "/admin/seasons": 172502,
-    "/admin/teams": 159363,
-    "/admin/teams/[id]": 170646,
-    "/admin/tournaments": 177964,
-    "/admin/tournaments/[id]": 178575,
-    "/admin/users": 158103,
-    "/admin/users/[id]": 178790,
-    "/_global-error": 135803,
-    "/_not-found": 141716
+    "/contact": 180108,
+    "/dashboard": 179970,
+    "/faq": 167195,
+    "/games": 167195,
+    "/games/[game]": 167195,
+    "/leaderboard": 167195,
+    "/leaderboard/[game]": 177898,
+    "/leaderboard/[game]/seasons/[id]": 167806,
+    "/login": 176366,
+    "/notifications": 177895,
+    "/": 173190,
+    "/payments/return": 168643,
+    "/payments/stub/[orderId]": 167195,
+    "/players/[id]": 194931,
+    "/privacy": 167195,
+    "/profile": 208304,
+    "/refund-policy": 167195,
+    "/rules": 167195,
+    "/scrims": 170755,
+    "/scrims/[id]": 201192,
+    "/search": 167195,
+    "/signup": 179394,
+    "/teams": 183135,
+    "/teams/[id]": 167195,
+    "/terms": 167195,
+    "/tournament": 167195,
+    "/tournament/[game]": 181393,
+    "/tournament/[game]/past": 167195,
+    "/admin/announcements": 173394,
+    "/admin/audit": 159765,
+    "/admin/content": 181380,
+    "/admin/deletion-requests": 172847,
+    "/admin/matches/new": 176710,
+    "/admin/matches": 159765,
+    "/admin/matches/[id]/edit": 176710,
+    "/admin/matches/[id]": 178600,
+    "/admin": 157513,
+    "/admin/payouts": 174467,
+    "/admin/points": 173090,
+    "/admin/reports": 170626,
+    "/admin/results": 171916,
+    "/admin/results/[matchId]": 181945,
+    "/admin/seasons": 172531,
+    "/admin/teams": 159384,
+    "/admin/teams/[id]": 170675,
+    "/admin/tournaments": 177874,
+    "/admin/tournaments/[id]": 178485,
+    "/admin/users": 158124,
+    "/admin/users/[id]": 178847,
+    "/_global-error": 135817,
+    "/_not-found": 141730
   },
   "other": 76471
 }

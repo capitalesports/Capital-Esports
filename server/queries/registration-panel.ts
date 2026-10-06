@@ -3,7 +3,7 @@ import type { RegistrationPanelState } from "@/components/match/registration-pan
 import type { SessionUser } from "@/server/auth/session";
 import { paymentProvider, paymentsEnabled } from "@/server/env";
 import { isTeamMode, playersPerSlot } from "@/lib/match-schema";
-import { isOpenEntry } from "@/lib/lobbies";
+import { takesEveryone } from "@/lib/lobbies";
 import {
   gameProfileFor,
   isGameProfileComplete,
@@ -50,7 +50,7 @@ export async function buildPanelState(
         registration.status === "WAITLISTED"
           ? await waitlistRank(match.id, registration.position)
           : null,
-      canCancel: canCancelRegistration(match, now),
+      canCancel: canCancelRegistration(match, now, registration.status !== "PENDING_PAYMENT"),
       teamName: registration.team?.name ?? registration.teamName ?? null,
       roster: registration.members.map((m) => ({
         name: m.ign ?? m.user?.displayName ?? "Player",
@@ -100,7 +100,7 @@ export async function buildPanelState(
   };
 
   // Open-entry scrims never fill (more lobbies open at close); capped matches waitlist when full.
-  const willWaitlist = !isOpenEntry(match) && match._count.registrations >= match.maxSlots;
+  const willWaitlist = !takesEveryone(match) && match._count.registrations >= match.maxSlots;
   if (!isTeamMode(match.mode)) return { kind: "SOLO", mode: match.mode, willWaitlist, playingAs };
 
   // A saved team can fill the roster in one tap (DECISIONS M17): teammates with a complete ID for

@@ -5,34 +5,37 @@ import { writeAudit } from "@/server/audit";
 import { db, type Tx } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { parseInput } from "@/server/validation";
-import { GAME_CONFIG, GAMES, type Game } from "@/lib/games";
+import { GAME_CONFIG, GAMES } from "@/lib/games";
+import {
+  MIN_TOURNAMENT_LOBBY,
+  planDuoTournamentLobbies,
+  planTournamentLobbies,
+} from "@/lib/lobbies";
 import {
   isHeadToHead,
   MATCH_MODES,
   maxSlotsFor,
   MODE_LABEL,
   MODES_FOR_GAME,
-  type MatchMode,
+  playersPerSlot,
 } from "@/lib/match-schema";
 import { rupeesToPaise } from "@/lib/money";
 import { assertAdmin, type Actor } from "@/lib/roles";
 import { addMinutes, istInputToUtc } from "@/lib/time";
 import {
   bracketPodium,
-  firstRoundPairs,
-  isBracketSize,
+  bracketShape,
   mondayOfIstWeek,
-  nextSlot,
-  roundCount,
+  nextRoundEntrants,
+  pairRound,
   roundName,
-  siblingIndex,
   type BracketMatchResult,
-  type BracketSize,
 } from "@/lib/tournament";
 import { applyTransition } from "./match-status";
 import { cancelMatch } from "./matches";
-import { notify } from "./notify";
-import { lobbyStandingsFor } from "./tournament-queries";
+import { notify, type NotificationEvent } from "./notify";
+import { executeRefunds, markRefund } from "./payments";
+import { bracketState, lobbyStandingsFor, unitOf } from "./tournament-queries";
 
 const CLOSE_OFFSET_MIN = 30;
 /** Gap before a next-round bracket match (after the later feeder match started). */
@@ -74,7 +77,6 @@ export const tournamentFormSchema = z
     /** Paid at sign-up (the sign-up list carries it); 0 = free. Refunded if the tournament is cancelled. */
     entryFee: money.default(0),
     rulesMarkdown: z.string().max(20_000).default(""),
-    bracketSize: z.coerce.number().int().optional(),
     streamUrl: httpsOrEmpty,
   })
   .superRefine((v, ctx) => {
@@ -84,9 +86,6 @@ export const tournamentFormSchema = z
         path: ["mode"],
         message: "This mode is not available for the chosen game",
       });
-    } else if (isHeadToHead(v.mode)) {
-      if (!v.bracketSize || !isBracketSize(v.bracketSize))
-        ctx.addIssue({ code: "custom", path: ["bracketSize"], message: "Choose 8 or 16 entries" });
     }
   });
 
@@ -107,8 +106,8 @@ export async function createTournament(actor: Actor | null, input: unknown) {
   const me = assertAdmin(actor);
   const v = parseInput(tournamentFormSchema, input);
   const format = isHeadToHead(v.mode) ? "BRACKET" : "LOBBY_POINTS";
-  // Lobby tournaments take a full lobby (no max field); brackets take exactly 8 or 16.
-  const slots = format === "BRACKET" ? v.bracketSize! : maxSlotsFor(v.game, v.mode);
+  // Sign-ups are uncapped (DECISIONS M50); maxSlots is one lobby (or one game) for display.
+  const slots = maxSlotsFor(v.game, v.mode);
   try {
     return await db.$transaction(async (tx) => {
       const t = await tx.tournament.create({
@@ -121,7 +120,7 @@ export async function createTournament(actor: Actor | null, input: unknown) {
           rulesMarkdown: v.rulesMarkdown,
           format,
           mode: v.mode,
-          bracketSize: format === "BRACKET" ? v.bracketSize : null,
+          bracketSize: null,
           streamUrl: v.streamUrl,
         },
       });
@@ -180,31 +179,19 @@ const updateSchema = z.object({
   /** Structure: only while nobody has signed up and no lobby/bracket match exists. */
   startsAt: z.preprocess(blankToUndefined, istDateTime.optional()),
   mode: z.preprocess(blankToUndefined, z.enum(MATCH_MODES).optional()),
-  bracketSize: z.preprocess(blankToUndefined, z.coerce.number().int().optional()),
 });
 
 type TournamentRow = Awaited<ReturnType<typeof loadTournament>>;
 
-/** New structure (start, mode, size) if the input changes it, validated like createTournament. */
-async function structureChange(
-  tx: Tx,
-  t: TournamentRow,
-  v: z.infer<typeof updateSchema>,
-) {
+/** New structure (start, mode) if the input changes it, validated like createTournament. */
+async function structureChange(tx: Tx, t: TournamentRow, v: z.infer<typeof updateSchema>) {
   const entry = t.entryMatchId
     ? await tx.match.findUnique({ where: { id: t.entryMatchId } })
     : null;
   const mode = v.mode ?? t.mode;
   const startsAt = v.startsAt ?? t.startsAt;
   const format = isHeadToHead(mode) ? ("BRACKET" as const) : ("LOBBY_POINTS" as const);
-  const size =
-    format === "BRACKET"
-      ? (v.bracketSize ?? (t.format === "BRACKET" ? t.bracketSize : null))
-      : maxSlotsFor(t.game, mode);
-  const changed =
-    startsAt.getTime() !== t.startsAt.getTime() ||
-    mode !== t.mode ||
-    (format === "BRACKET" ? size !== t.bracketSize : size !== entry?.maxSlots);
+  const changed = startsAt.getTime() !== t.startsAt.getTime() || mode !== t.mode;
   if (!changed) return null;
 
   if (t.cancelledAt) throw new AppError("CONFLICT", "This tournament is cancelled.");
@@ -217,18 +204,14 @@ async function structureChange(
   if (signedUp || matches) {
     throw new AppError(
       "CONFLICT",
-      "Start time, mode and size can only change while nobody has signed up and no matches exist.",
+      "Start time and mode can only change while nobody has signed up and no matches exist.",
     );
   }
   if (!MODES_FOR_GAME[t.game].includes(mode))
     throw new AppError("VALIDATION", "This mode is not available for this game.", {
       mode: ["Not available for this game"],
     });
-  if (format === "BRACKET" && (!size || !isBracketSize(size)))
-    throw new AppError("VALIDATION", "Choose 8 or 16 entries.", {
-      bracketSize: ["Choose 8 or 16 entries"],
-    });
-  return { entry, mode, startsAt, format, slots: size! };
+  return { entry, mode, startsAt, format, slots: maxSlotsFor(t.game, mode) };
 }
 
 /** New entry fee (paise) if it changes; refused once anyone has signed up. Null = unchanged. */
@@ -269,7 +252,7 @@ export async function updateTournament(actor: Actor | null, input: unknown) {
                 weekOf: mondayOfIstWeek(change.startsAt),
                 mode: change.mode,
                 format: change.format,
-                bracketSize: change.format === "BRACKET" ? change.slots : null,
+                bracketSize: null,
               }
             : {}),
         },
@@ -373,7 +356,10 @@ const lobbySchema = z.object({
   gapMinutes: z.coerce.number().int().min(15).max(240).default(45),
 });
 
-/** Lobby-points tournaments: add N lobby matches spaced `gapMinutes` apart. */
+/**
+ * Lobby-points tournaments: add N matches (rounds) spaced `gapMinutes` apart. Added after
+ * registration closed, they are split into the same lobbies straight away.
+ */
 export async function addLobbyMatches(actor: Actor | null, input: unknown) {
   const me = assertAdmin(actor);
   const v = parseInput(lobbySchema, input);
@@ -381,29 +367,14 @@ export async function addLobbyMatches(actor: Actor | null, input: unknown) {
     const t = await loadOpenTournament(tx, v.tournamentId);
     if (t.format !== "LOBBY_POINTS")
       throw new AppError("VALIDATION", "Lobby matches are for solo, duo and squad tournaments.");
-    const entry = await tx.match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
-    const existing = await tx.match.count({ where: { tournamentId: t.id, isEntryList: false } });
+    const existing = await tx.match.count({ where: roundWhere(t.id) });
     const created = [];
     for (let i = 0; i < v.count; i++) {
       const startsAt = addMinutes(v.firstStartsAt, i * v.gapMinutes);
-      created.push(
-        await tx.match.create({
-          data: {
-            game: t.game,
-            kind: "TOURNAMENT",
-            mode: t.mode,
-            title: `${t.title} — Match ${existing + i + 1}`,
-            startsAt,
-            registrationClosesAt: addMinutes(startsAt, -CLOSE_OFFSET_MIN),
-            maxSlots: entry.maxSlots,
-            status: "UPCOMING",
-            tournamentId: t.id,
-            streamUrl: t.streamUrl,
-            createdById: me.id,
-          },
-        }),
-      );
+      created.push(await createRoundMatch(tx, t, existing + i + 1, startsAt, me.id));
     }
+    const entry = await tx.match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
+    if (entry.status === "REGISTRATION_CLOSED") await distributeLobbies(tx, t, me.id);
     await writeAudit(tx, {
       actorId: me.id,
       action: "tournament.addMatches",
@@ -415,14 +386,56 @@ export async function addLobbyMatches(actor: Actor | null, input: unknown) {
   });
 }
 
+const NOT_STARTED = ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED"] as const;
+
+/** A lobby tournament's matches (rounds): lobby 1 of each; extra lobbies point back at it. */
+function roundWhere(tournamentId: string) {
+  return { tournamentId, isEntryList: false, parentMatchId: null, bracketRound: null };
+}
+
+type TournamentInfo = Pick<
+  TournamentRow,
+  "id" | "game" | "mode" | "title" | "streamUrl" | "startsAt" | "entryMatchId" | "format"
+>;
+
+async function createRoundMatch(
+  tx: Tx,
+  t: TournamentInfo,
+  number: number,
+  startsAt: Date,
+  createdById: string,
+) {
+  return tx.match.create({
+    data: {
+      game: t.game,
+      kind: "TOURNAMENT",
+      mode: t.mode,
+      title: `${t.title} — Match ${number}`,
+      startsAt,
+      registrationClosesAt: addMinutes(startsAt, -CLOSE_OFFSET_MIN),
+      maxSlots: maxSlotsFor(t.game, t.mode),
+      // Filled from the sign-up list, never by registration: no minimum to cancel on.
+      minSlots: 0,
+      status: "UPCOMING",
+      tournamentId: t.id,
+      streamUrl: t.streamUrl,
+      createdById,
+    },
+  });
+}
+
 /** Close the sign-up list (squads that never fully confirmed are dropped). */
-async function closeEntryList(tx: Tx, entryId: string, actorId: string) {
+async function closeEntryList(tx: Tx, entryId: string, actorId: string | null) {
   const entry = await tx.match.findUniqueOrThrow({ where: { id: entryId } });
   if (entry.status === "UPCOMING")
     await applyTransition(tx, entryId, "UPCOMING", "REGISTRATION_OPEN", { actorId });
   if (entry.status === "UPCOMING" || entry.status === "REGISTRATION_OPEN") {
     await applyTransition(tx, entryId, "REGISTRATION_OPEN", "REGISTRATION_CLOSED", { actorId });
   }
+}
+
+/** Confirmed sign-ups in sign-up order, with their rosters. */
+function confirmedEntries(tx: Tx, entryId: string) {
   return tx.registration.findMany({
     where: { matchId: entryId, status: "CONFIRMED" },
     orderBy: { position: "asc" },
@@ -430,7 +443,7 @@ async function closeEntryList(tx: Tx, entryId: string, actorId: string) {
   });
 }
 
-type EntryRegistration = Awaited<ReturnType<typeof closeEntryList>>[number];
+type EntryRegistration = Awaited<ReturnType<typeof confirmedEntries>>[number];
 
 /** Copy a confirmed entry (and its roster) into a match as a CONFIRMED registration. */
 async function copyEntry(tx: Tx, entry: EntryRegistration, matchId: string, position: number) {
@@ -460,82 +473,267 @@ async function copyEntry(tx: Tx, entry: EntryRegistration, matchId: string, posi
   return reg;
 }
 
-/** Lobby-points tournaments: close sign-ups and enter every confirmed entry into every lobby match. Idempotent. */
+/** Everyone who plays under an entry: the registrant and roster players with accounts. */
+function playersOfEntry(entry: EntryRegistration): string[] {
+  return [
+    ...new Set([entry.userId, ...entry.members.flatMap((m) => (m.userId ? [m.userId] : []))]),
+  ];
+}
+
+type Refund = NonNullable<Awaited<ReturnType<typeof markRefund>>>;
+
+export interface EntriesClosed {
+  /** Notifications to send after commit. */
+  events: NotificationEvent[];
+  /** Refunds to execute after commit (entries left without a lobby). */
+  refunds: Refund[];
+}
+
+/**
+ * Lobby tournaments (DECISIONS M50): split the confirmed entries into balanced lobbies of at most
+ * one lobby's capacity, the same lobby in every match (round). Each round's match becomes lobby 1;
+ * each extra lobby is its own match (room, results) pointing back at it. Entries that fit no lobby
+ * are removed and refunded. Rounds already split are left alone, so this is safe to rerun.
+ */
+async function distributeLobbies(
+  tx: Tx,
+  t: TournamentInfo,
+  actorId: string | null,
+): Promise<EntriesClosed> {
+  const out: EntriesClosed = { events: [], refunds: [] };
+  const entries = await confirmedEntries(tx, t.entryMatchId!);
+  if (!entries.length) return out;
+  let rounds = await tx.match.findMany({ where: roundWhere(t.id), orderBy: { startsAt: "asc" } });
+  if (!rounds.length) {
+    const entry = await tx.match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
+    rounds = [await createRoundMatch(tx, t, 1, t.startsAt, actorId ?? entry.createdById)];
+  }
+  const firstSplit = rounds.every((r) => r.lobbyNumber === null);
+  const capacity = maxSlotsFor(t.game, t.mode);
+  const minSize = Math.ceil(MIN_TOURNAMENT_LOBBY / playersPerSlot(t.game, t.mode));
+  const plan =
+    t.mode === "DUO"
+      ? planDuoTournamentLobbies(entries.length, capacity, minSize)
+      : planTournamentLobbies(entries.length, capacity, minSize);
+  const groups: EntryRegistration[][] = [];
+  let next = 0;
+  for (const size of plan.sizes) {
+    groups.push(entries.slice(next, next + size));
+    next += size;
+  }
+
+  for (const round of rounds) {
+    if (round.lobbyNumber !== null || !(NOT_STARTED as readonly string[]).includes(round.status))
+      continue;
+    const many = groups.length > 1;
+    await tx.match.update({
+      where: { id: round.id },
+      data: { lobbyNumber: 1, ...(many ? { title: `${round.title} — Lobby 1` } : {}) },
+    });
+    for (const [i, group] of groups.entries()) {
+      const lobby =
+        i === 0
+          ? round
+          : await tx.match.create({
+              data: {
+                game: round.game,
+                kind: round.kind,
+                mode: round.mode,
+                title: `${round.title} — Lobby ${i + 1}`,
+                startsAt: round.startsAt,
+                registrationClosesAt: round.registrationClosesAt,
+                maxSlots: capacity,
+                minSlots: 0,
+                status: "REGISTRATION_CLOSED",
+                tournamentId: t.id,
+                streamUrl: round.streamUrl,
+                parentMatchId: round.id,
+                lobbyNumber: i + 1,
+                createdById: round.createdById,
+              },
+            });
+      for (const [pos, e] of group.entries()) await copyEntry(tx, e, lobby.id, pos + 1);
+      if (firstSplit && round === rounds[0]) {
+        out.events.push({
+          type: "TOURNAMENT_LOBBY",
+          userIds: group.flatMap(playersOfEntry),
+          matchId: lobby.id,
+          lobby: i + 1,
+        });
+      }
+    }
+    if (round.status === "UPCOMING")
+      await applyTransition(tx, round.id, "UPCOMING", "REGISTRATION_OPEN", { actorId });
+    if (round.status !== "REGISTRATION_CLOSED")
+      await applyTransition(tx, round.id, "REGISTRATION_OPEN", "REGISTRATION_CLOSED", { actorId });
+  }
+
+  const unplaced = firstSplit ? entries.slice(next) : [];
+  for (const e of unplaced) {
+    await tx.registration.update({
+      where: { id: e.id },
+      data: { status: "CANCELLED", cancelledAt: new Date() },
+    });
+    const refund = e.paymentId ? await markRefund(tx, e.paymentId, "Every lobby was full") : null;
+    if (refund) out.refunds.push(refund);
+  }
+  if (unplaced.length) {
+    out.events.push({
+      type: "TOURNAMENT_UNPLACED",
+      userIds: unplaced.flatMap(playersOfEntry),
+      matchId: t.entryMatchId!,
+    });
+  }
+  await writeAudit(tx, {
+    actorId,
+    action: "tournament.lobbies",
+    entityType: "Tournament",
+    entityId: t.id,
+    after: { entries: entries.length, lobbies: plan.sizes, unplaced: unplaced.length },
+  });
+  return out;
+}
+
+/** Bracket match title: "Final", or "Semifinals, game 2". */
+function bracketTitle(t: TournamentInfo, round: number, index: number, totalRounds: number) {
+  const name = roundName(round, totalRounds);
+  return `${t.title} — ${name}${round < totalRounds ? `, game ${index + 1}` : ""}`;
+}
+
+/** Create one bracket round: a 2-side match per pair of entrants (sign-up entries by unit key). */
+async function createBracketRound(
+  tx: Tx,
+  t: TournamentInfo,
+  round: number,
+  entrants: string[],
+  entries: EntryRegistration[],
+  startsAt: Date,
+  createdById: string,
+) {
+  const byUnit = new Map(entries.map((e) => [unitOf(e), e]));
+  const totalRounds = bracketShape(entries.length).length;
+  const created = [];
+  for (const [index, pair] of pairRound(entrants).pairs.entries()) {
+    const m = await tx.match.create({
+      data: {
+        game: t.game,
+        kind: "TOURNAMENT",
+        mode: t.mode,
+        title: bracketTitle(t, round, index, totalRounds),
+        startsAt,
+        registrationClosesAt: addMinutes(startsAt, -CLOSE_OFFSET_MIN),
+        maxSlots: 2,
+        minSlots: 0,
+        status: "REGISTRATION_CLOSED",
+        tournamentId: t.id,
+        bracketRound: round,
+        bracketIndex: index,
+        streamUrl: t.streamUrl,
+        createdById,
+      },
+    });
+    for (const [side, unit] of pair.entries())
+      await copyEntry(tx, byUnit.get(unit)!, m.id, side + 1);
+    created.push({ match: m, pair });
+  }
+  return created;
+}
+
+/**
+ * Bracket tournaments (DECISIONS M50): round 1 pairs the confirmed entries in sign-up order
+ * (1 v 2, 3 v 4, …); with an odd count the last one gets a bye. Does nothing once drawn.
+ */
+async function drawBracket(
+  tx: Tx,
+  t: TournamentInfo,
+  startsAt: Date,
+  actorId: string | null,
+): Promise<EntriesClosed> {
+  const out: EntriesClosed = { events: [], refunds: [] };
+  if (await tx.match.count({ where: { tournamentId: t.id, bracketRound: { not: null } } }))
+    return out;
+  const entries = await confirmedEntries(tx, t.entryMatchId!);
+  if (entries.length < 2) return out;
+  const entry = await tx.match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
+  const created = await createBracketRound(
+    tx,
+    t,
+    1,
+    entries.map(unitOf),
+    entries,
+    startsAt,
+    actorId ?? entry.createdById,
+  );
+  const byUnit = new Map(entries.map((e) => [unitOf(e), e]));
+  for (const { match, pair } of created) {
+    out.events.push({
+      type: "BRACKET_READY",
+      userIds: pair.flatMap((u) => playersOfEntry(byUnit.get(u)!)),
+      matchId: match.id,
+    });
+  }
+  const bye = pairRound(entries).bye;
+  if (bye)
+    out.events.push({ type: "BRACKET_READY", userIds: playersOfEntry(bye), matchId: entry.id });
+  await writeAudit(tx, {
+    actorId,
+    action: "tournament.bracket",
+    entityType: "Tournament",
+    entityId: t.id,
+    after: {
+      entries: entries.length,
+      round1: created.map((c) => c.match.id),
+      bye: bye?.id ?? null,
+    },
+  });
+  return out;
+}
+
+/**
+ * Registration of a tournament sign-up list just closed (the status job, or an admin): split the
+ * entries into lobbies or draw the bracket. Idempotent. Returns what to send after commit.
+ */
+export async function onEntriesClosed(
+  tx: Tx,
+  entryMatchId: string,
+  actorId: string | null,
+): Promise<EntriesClosed | null> {
+  const t = await tx.tournament.findFirst({ where: { entryMatchId } });
+  if (!t || t.cancelledAt) return null;
+  return t.format === "BRACKET"
+    ? drawBracket(tx, t, t.startsAt, actorId)
+    : distributeLobbies(tx, t, actorId);
+}
+
+/** After commit: refunds, then notifications. */
+export async function finishEntriesClosed(closed: EntriesClosed | null) {
+  if (!closed) return;
+  if (closed.refunds.length) await executeRefunds(closed.refunds);
+  await Promise.all(closed.events.map(notify));
+}
+
+/** Admin fallback for lobby tournaments: close sign-ups now and split into lobbies. Idempotent. */
 export async function lockEntries(actor: Actor | null, input: unknown) {
   const me = assertAdmin(actor);
   const { tournamentId } = parseInput(z.object({ tournamentId: z.string().min(1) }), input);
-  return db.$transaction(async (tx) => {
+  const { closed, summary } = await db.$transaction(async (tx) => {
     const t = await loadOpenTournament(tx, tournamentId);
     if (t.format !== "LOBBY_POINTS")
-      throw new AppError("VALIDATION", "Use “Generate bracket” for bracket tournaments.");
-    const entries = await closeEntryList(tx, t.entryMatchId!, me.id);
-    if (!entries.length) throw new AppError("CONFLICT", "No confirmed entries to enter.");
-    const matches = await tx.match.findMany({
-      where: {
-        tournamentId,
-        isEntryList: false,
-        status: { in: ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED"] },
-      },
-      orderBy: { startsAt: "asc" },
+      throw new AppError("VALIDATION", "Use “Draw bracket” for bracket tournaments.");
+    await closeEntryList(tx, t.entryMatchId!, me.id);
+    const entries = await tx.registration.count({
+      where: { matchId: t.entryMatchId!, status: "CONFIRMED" },
     });
-    if (!matches.length) throw new AppError("CONFLICT", "Add the lobby matches first.");
-    let added = 0;
-    for (const m of matches) {
-      const already = new Set(
-        (
-          await tx.registration.findMany({ where: { matchId: m.id }, select: { userId: true } })
-        ).map((r) => r.userId),
-      );
-      for (const [i, e] of entries.entries()) {
-        if (already.has(e.userId)) continue;
-        await copyEntry(tx, e, m.id, i + 1);
-        added++;
-      }
-      if (m.status === "UPCOMING")
-        await applyTransition(tx, m.id, "UPCOMING", "REGISTRATION_OPEN", { actorId: me.id });
-      if (m.status !== "REGISTRATION_CLOSED")
-        await applyTransition(tx, m.id, "REGISTRATION_OPEN", "REGISTRATION_CLOSED", {
-          actorId: me.id,
-        });
-    }
-    await writeAudit(tx, {
-      actorId: me.id,
-      action: "tournament.lockEntries",
-      entityType: "Tournament",
-      entityId: t.id,
-      after: { teams: entries.length, matches: matches.length, added },
-    });
-    return { teams: entries.length, matches: matches.length };
+    if (!entries) throw new AppError("CONFLICT", "No confirmed entries to enter.");
+    const closed = await distributeLobbies(tx, t, me.id);
+    const [rounds, lobbies] = await Promise.all([
+      tx.match.count({ where: roundWhere(t.id) }),
+      tx.match.count({ where: { tournamentId, isEntryList: false } }),
+    ]);
+    return { closed, summary: { teams: entries, matches: rounds, lobbies } };
   });
-}
-
-async function createBracketMatch(
-  tx: Tx,
-  t: { id: string; game: Game; mode: MatchMode; title: string; streamUrl: string | null },
-  round: number,
-  index: number,
-  totalRounds: number,
-  startsAt: Date,
-  actorId: string | null,
-  createdById: string,
-) {
-  return tx.match.create({
-    data: {
-      game: t.game,
-      kind: "TOURNAMENT",
-      mode: t.mode,
-      title: `${t.title} — ${roundName(round, totalRounds)}${totalRounds - round >= 1 ? ` ${index + 1}` : ""}`,
-      startsAt,
-      registrationClosesAt: addMinutes(startsAt, -CLOSE_OFFSET_MIN),
-      maxSlots: 2,
-      status: "REGISTRATION_CLOSED",
-      tournamentId: t.id,
-      bracketRound: round,
-      bracketIndex: index,
-      streamUrl: t.streamUrl,
-      createdById: actorId ?? createdById,
-    },
-  });
+  await finishEntriesClosed(closed);
+  return summary;
 }
 
 const bracketSchema = z.object({
@@ -543,184 +741,108 @@ const bracketSchema = z.object({
   firstRoundStartsAt: istDateTime,
 });
 
-/** Head-to-head modes: close sign-ups and seed exactly 8 or 16 confirmed entries into round 1. */
+/** Admin fallback for bracket tournaments: close sign-ups now and draw round 1. */
 export async function generateBracket(actor: Actor | null, input: unknown) {
   const me = assertAdmin(actor);
   const { tournamentId, firstRoundStartsAt } = parseInput(bracketSchema, input);
-  return db.$transaction(async (tx) => {
+  const { closed, created } = await db.$transaction(async (tx) => {
     const t = await loadOpenTournament(tx, tournamentId);
-    if (t.format !== "BRACKET" || !t.bracketSize || !isBracketSize(t.bracketSize)) {
+    if (t.format !== "BRACKET")
       throw new AppError("VALIDATION", "This tournament does not use a bracket.");
-    }
     if (await tx.match.count({ where: { tournamentId, bracketRound: { not: null } } })) {
-      throw new AppError("CONFLICT", "The bracket has already been generated.");
+      throw new AppError("CONFLICT", "The bracket has already been drawn.");
     }
-    const entries = await closeEntryList(tx, t.entryMatchId!, me.id);
-    if (entries.length !== t.bracketSize) {
+    await closeEntryList(tx, t.entryMatchId!, me.id);
+    const entries = await tx.registration.count({
+      where: { matchId: t.entryMatchId!, status: "CONFIRMED" },
+    });
+    if (entries < 2)
       throw new AppError(
         "VALIDATION",
-        `The bracket needs exactly ${t.bracketSize} confirmed entries (have ${entries.length}).`,
+        `A bracket needs at least 2 confirmed entries (have ${entries}).`,
       );
-    }
-    const totalRounds = roundCount(t.bracketSize as BracketSize);
-    const pairs = firstRoundPairs(entries);
-    const created = [];
-    for (const [index, [a, b]] of pairs.entries()) {
-      const m = await createBracketMatch(
-        tx,
-        t,
-        1,
-        index,
-        totalRounds,
-        firstRoundStartsAt,
-        me.id,
-        me.id,
-      );
-      await copyEntry(tx, a, m.id, 1);
-      await copyEntry(tx, b, m.id, 2);
-      created.push(m);
-    }
-    await writeAudit(tx, {
-      actorId: me.id,
-      action: "tournament.bracket",
-      entityType: "Tournament",
-      entityId: t.id,
-      after: { round1: created.map((m) => m.id) },
+    const closed = await drawBracket(tx, t, firstRoundStartsAt, me.id);
+    const created = await tx.match.findMany({
+      where: { tournamentId, bracketRound: 1 },
+      orderBy: { bracketIndex: "asc" },
     });
-    return created;
+    return { closed, created };
   });
-}
-
-/** The approved winning registration of a bracket match, or null. */
-async function bracketWinner(tx: Tx, matchId: string) {
-  const res = await tx.result.findFirst({
-    where: { matchId, won: true, approvedAt: { not: null } },
-    select: { registrationId: true },
-  });
-  if (!res) return null;
-  return tx.registration.findUniqueOrThrow({
-    where: { id: res.registrationId },
-    include: { members: { where: { status: "CONFIRMED" } } },
-  });
+  await finishEntriesClosed(closed);
+  return created;
 }
 
 /**
- * Called inside the results-approval transaction: once both feeder matches of a next-round slot
- * are decided, create (or refresh, if not started) the next-round match with the two winners.
+ * Called inside the results-approval transaction: once every match of a bracket round is decided,
+ * create the next round (last round's bye first, then the winners in match order).
  */
 export async function advanceBracket(tx: Tx, matchId: string, actorId: string | null) {
   const match = await tx.match.findUniqueOrThrow({
     where: { id: matchId },
-    select: {
-      tournamentId: true,
-      bracketRound: true,
-      bracketIndex: true,
-      startsAt: true,
-      createdById: true,
-    },
+    select: { tournamentId: true, bracketRound: true, createdById: true },
   });
-  if (!match.tournamentId || match.bracketRound === null || match.bracketIndex === null)
-    return null;
+  if (!match.tournamentId || match.bracketRound === null) return null;
   const t = await loadTournament(tx, match.tournamentId);
-  if (t.format !== "BRACKET" || !t.bracketSize) return null;
-  const totalRounds = roundCount(t.bracketSize as BracketSize);
-  if (match.bracketRound >= totalRounds) return null; // final decided
-
-  const sibling = await tx.match.findFirst({
-    where: {
-      tournamentId: t.id,
-      bracketRound: match.bracketRound,
-      bracketIndex: siblingIndex(match.bracketIndex),
-    },
+  if (t.format !== "BRACKET" || !t.entryMatchId) return null;
+  const state = await bracketState(tx, t.entryMatchId, t.id);
+  const round = state.rounds[match.bracketRound - 1];
+  if (!round?.complete) return null;
+  const entrants = nextRoundEntrants(round.winners as string[], round.bye);
+  if (entrants.length < 2) return null; // the final is decided
+  const nextRound = round.round + 1;
+  if (await tx.match.count({ where: { tournamentId: t.id, bracketRound: nextRound } })) return null;
+  const latest = await tx.match.findFirstOrThrow({
+    where: { tournamentId: t.id, bracketRound: round.round },
+    orderBy: { startsAt: "desc" },
+    select: { startsAt: true },
   });
-  if (!sibling) return null;
-  const [mine, theirs] = await Promise.all([
-    bracketWinner(tx, matchId),
-    bracketWinner(tx, sibling.id),
-  ]);
-  if (!mine || !theirs) return null;
-
-  const slot = nextSlot(match.bracketRound, match.bracketIndex);
-  const [first, second] = slot.side === 0 ? [mine, theirs] : [theirs, mine];
-  let next = await tx.match.findFirst({
-    where: { tournamentId: t.id, bracketRound: slot.round, bracketIndex: slot.index },
-  });
-  if (next && !["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(next.status))
-    return next; // already played
-  if (next) {
-    await tx.registrationMember.deleteMany({ where: { matchId: next.id } });
-    await tx.registration.deleteMany({ where: { matchId: next.id } });
-  } else {
-    const later = match.startsAt > sibling.startsAt ? match.startsAt : sibling.startsAt;
-    next = await createBracketMatch(
-      tx,
-      t,
-      slot.round,
-      slot.index,
-      totalRounds,
-      addMinutes(later, NEXT_ROUND_GAP_MIN),
-      actorId,
-      match.createdById,
-    );
-  }
-  await copyEntry(tx, first, next.id, 1);
-  await copyEntry(tx, second, next.id, 2);
+  const entries = await confirmedEntries(tx, t.entryMatchId);
+  const created = await createBracketRound(
+    tx,
+    t,
+    nextRound,
+    entrants,
+    entries,
+    addMinutes(latest.startsAt, NEXT_ROUND_GAP_MIN),
+    actorId ?? match.createdById,
+  );
   await writeAudit(tx, {
     actorId,
     action: "tournament.advance",
-    entityType: "Match",
-    entityId: next.id,
-    after: {
-      round: slot.round,
-      index: slot.index,
-      teams: [first.teamId ?? first.userId, second.teamId ?? second.userId],
-    },
+    entityType: "Tournament",
+    entityId: t.id,
+    after: { round: nextRound, entrants, matchIds: created.map((c) => c.match.id) },
   });
-  return next;
+  return created.map((c) => c.match);
 }
 
-const NOT_STARTED = ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED"] as const;
-
 /**
- * Called inside the results-reopen transaction for a bracket match: undo advanceBracket.
- * The advanced side leaves the next-round match (deleted when it has nobody left) so that
- * approving again re-advances the right winner. Refuses once the next-round match has started.
+ * Called inside the results-reopen transaction for a bracket match: undo advanceBracket by
+ * removing the later rounds, which are rebuilt when the round is decided again. Refuses once a
+ * later-round match has started.
  */
 export async function rollbackBracketAdvance(tx: Tx, matchId: string) {
   const match = await tx.match.findUniqueOrThrow({
     where: { id: matchId },
-    select: { tournamentId: true, bracketRound: true, bracketIndex: true },
+    select: { tournamentId: true, bracketRound: true },
   });
-  if (!match.tournamentId || match.bracketRound === null || match.bracketIndex === null)
-    return null;
-  const slot = nextSlot(match.bracketRound, match.bracketIndex);
-  const next = await tx.match.findFirst({
-    where: { tournamentId: match.tournamentId, bracketRound: slot.round, bracketIndex: slot.index },
+  if (!match.tournamentId || match.bracketRound === null) return null;
+  const later = await tx.match.findMany({
+    where: { tournamentId: match.tournamentId, bracketRound: { gt: match.bracketRound } },
     select: { id: true, status: true },
   });
-  if (!next) return null;
-  if (!(NOT_STARTED as readonly string[]).includes(next.status)) {
+  if (!later.length) return null;
+  if (later.some((m) => !(NOT_STARTED as readonly string[]).includes(m.status))) {
     throw new AppError(
       "CONFLICT",
       "The next-round match has already started. Reopen or cancel that match first.",
     );
   }
-  const winner = await bracketWinner(tx, matchId);
-  if (winner) {
-    const side = winner.teamId
-      ? { teamId: winner.teamId }
-      : { userId: winner.userId, teamId: null };
-    await tx.registrationMember.deleteMany({
-      where: { matchId: next.id, registration: side },
-    });
-    await tx.registration.deleteMany({ where: { matchId: next.id, ...side } });
-  }
-  const left = await tx.registration.count({ where: { matchId: next.id } });
-  if (!left) {
-    await tx.registrationMember.deleteMany({ where: { matchId: next.id } });
-    await tx.match.delete({ where: { id: next.id } });
-  }
-  return { nextMatchId: next.id, removed: winner?.id ?? null, deleted: !left };
+  const ids = later.map((m) => m.id);
+  await tx.registrationMember.deleteMany({ where: { matchId: { in: ids } } });
+  await tx.registration.deleteMany({ where: { matchId: { in: ids } } });
+  await tx.match.deleteMany({ where: { id: { in: ids } } });
+  return { deleted: ids };
 }
 
 /** Clear published winners (admin reopened a result of a published tournament). */
@@ -750,7 +872,7 @@ export interface PublishedWinner {
 /** Compute the podium (entries identified by their team or solo player). */
 async function podium(
   tx: Tx,
-  t: { id: string; format: "BRACKET" | "LOBBY_POINTS"; bracketSize: number | null },
+  t: { id: string; format: "BRACKET" | "LOBBY_POINTS"; entryMatchId: string | null },
 ) {
   const unfinished = await tx.match.count({
     where: {
@@ -796,7 +918,10 @@ async function podium(
       });
     }
   }
-  return bracketPodium(results, roundCount(t.bracketSize as BracketSize));
+  const entries = await tx.registration.count({
+    where: { matchId: t.entryMatchId ?? "", status: "CONFIRMED" },
+  });
+  return bracketPodium(results, bracketShape(entries).length);
 }
 
 const publishSchema = z.object({

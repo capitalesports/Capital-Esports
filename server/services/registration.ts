@@ -9,7 +9,7 @@ import { enforceRateLimit } from "@/server/rate-limit";
 import { parseInput } from "@/server/validation";
 import { isBanRecordActive, isRegistrationBlocked } from "@/lib/bans";
 import { GAME_CONFIG } from "@/lib/games";
-import { isOpenEntry } from "@/lib/lobbies";
+import { takesEveryone } from "@/lib/lobbies";
 import { isTeamMode, playersPerSlot } from "@/lib/match-schema";
 import {
   isGameProfileComplete,
@@ -61,9 +61,9 @@ export async function lockMatch(tx: Tx, matchId: string) {
 
 type LockedMatch = Awaited<ReturnType<typeof lockMatch>>;
 
-/** Open-entry scrims take everyone (lobbies are split at close); others fill up to maxSlots. */
+/** Open-entry scrims and tournament sign-ups take everyone (split at close); others fill up to maxSlots. */
 function capacityOf(match: LockedMatch): number {
-  return isOpenEntry(match) ? Number.POSITIVE_INFINITY : match.maxSlots;
+  return takesEveryone(match) ? Number.POSITIVE_INFINITY : match.maxSlots;
 }
 
 async function slotsTaken(tx: Tx, matchId: string) {
@@ -562,8 +562,13 @@ export async function cancelRegistration(actor: Actor | null, input: unknown, no
     });
     if (!reg || !ACTIVE.includes(reg.status))
       throw new AppError("NOT_FOUND", "You are not registered for this match.");
-    if (!canCancelRegistration(match, now)) {
-      throw new AppError("CONFLICT", "Registration has closed; you can no longer cancel.");
+    if (!canCancelRegistration(match, now, reg.status !== "PENDING_PAYMENT")) {
+      throw new AppError(
+        "CONFLICT",
+        match.entryFeePaise > 0
+          ? "Paid entries cannot be cancelled."
+          : "Registration has closed; you can no longer cancel.",
+      );
     }
     await tx.registration.update({
       where: { id: reg.id },

@@ -36,7 +36,6 @@ export async function updateTournamentAction(input: {
   streamUrl?: string;
   startsAt?: string;
   mode?: string;
-  bracketSize?: string;
   entryFee?: string;
 }) {
   return runAction(async () => {
@@ -71,7 +70,7 @@ export async function lockEntriesAction(input: { tournamentId: string }) {
     const r = await lockEntries(await requireAdmin(), input);
     refresh(input.tournamentId);
     return r;
-  }, "Entries locked into every lobby match");
+  }, "Registration closed; entries split into lobbies");
 }
 
 export async function generateBracketAction(input: {
@@ -81,7 +80,7 @@ export async function generateBracketAction(input: {
   return runAction(async () => {
     await generateBracket(await requireAdmin(), input);
     refresh(input.tournamentId);
-  }, "Bracket generated");
+  }, "Bracket drawn");
 }
 
 export async function publishWinnersAction(input: { tournamentId: string; prizes: string[] }) {

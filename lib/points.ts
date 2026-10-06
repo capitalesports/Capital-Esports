@@ -44,8 +44,22 @@ export interface ValorantResult {
   roundDiff: number;
 }
 
+/**
+ * Lobby scoring needs a placement table. Valorant's config has none (it scores wins), so its
+ * Deathmatch uses the default table and 1 point per kill (DECISIONS M50).
+ */
+export function lobbyScoring(config: PointsConfigValues): PointsConfigValues {
+  if (config.placementPoints.length) return config;
+  return {
+    ...config,
+    placementPoints: [...DEFAULT_BR_PLACEMENT],
+    killPoints: config.killPoints || 1,
+  };
+}
+
 export function brPoints(config: PointsConfigValues, r: BrResult, isTournament: boolean): number {
-  const base = placementPoints(config, r.placement) + Math.max(0, r.kills) * config.killPoints;
+  const scoring = lobbyScoring(config);
+  const base = placementPoints(scoring, r.placement) + Math.max(0, r.kills) * scoring.killPoints;
   return isTournament ? base * config.tournamentMultiplier : base;
 }
 

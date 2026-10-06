@@ -1,6 +1,6 @@
 import type { HomeSettings } from "./content-keys";
 import { GAME_CONFIG, type Game } from "./games";
-import { MODE_LABEL, type MatchMode } from "./match-modes";
+import { isHeadToHead, MODE_LABEL, type MatchMode } from "./match-modes";
 
 function floorTo(n: number, unit: number) {
   return Math.floor(n / unit);
@@ -26,9 +26,40 @@ export function todayCountLabel(n: number): string {
   return `${n} match${n === 1 ? "" : "es"} today`;
 }
 
-/** Tournament card format line: "4 Squad" for battle royale squads (the design), else the mode ("1v1", "5v5", "Solo"). */
+/**
+ * A mode by its in-game name: Valorant solo is Deathmatch (DECISIONS M50); Free Fire's
+ * head-to-head rooms are Lone Wolf (1v1, 2v2) and Clash Squad (4v4); BGMI's are TDM (4v4 = "TDM").
+ */
+export function gameModeLabel(game: Game, mode: MatchMode): string {
+  if (game === "VALORANT" && mode === "SOLO") return "Deathmatch";
+  if (game === "VALORANT" && mode === "TWO_V_TWO") return "Scrims";
+  if (game === "FREE_FIRE" && (mode === "ONE_V_ONE" || mode === "TWO_V_TWO"))
+    return `Lone Wolf ${MODE_LABEL[mode]}`;
+  if (game === "FREE_FIRE" && mode === "FOUR_V_FOUR") return "Clash Squad";
+  if (game === "BGMI" && mode === "FOUR_V_FOUR") return "TDM";
+  if (game === "BGMI" && isHeadToHead(mode)) return `TDM ${MODE_LABEL[mode]}`;
+  return MODE_LABEL[mode];
+}
+
+/** Order of a game's tournament mode buttons (Valorant: Deathmatch, Scrims, 5v5, then 1v1). */
+const MODE_ORDER: Record<Game, MatchMode[]> = {
+  FREE_FIRE: ["SOLO", "DUO", "SQUAD", "ONE_V_ONE", "TWO_V_TWO", "FOUR_V_FOUR"],
+  BGMI: ["SOLO", "DUO", "SQUAD", "ONE_V_ONE", "TWO_V_TWO", "FOUR_V_FOUR"],
+  VALORANT: ["SOLO", "TWO_V_TWO", "FIVE_V_FIVE", "ONE_V_ONE"],
+};
+
+/** A game's current tournaments in mode-button order; the first is the page's default. */
+export function sortByModeOrder<T extends { mode: MatchMode }>(game: Game, list: T[]): T[] {
+  const rank = (m: MatchMode) => {
+    const i = MODE_ORDER[game].indexOf(m);
+    return i < 0 ? MODE_ORDER[game].length : i;
+  };
+  return [...list].sort((a, b) => rank(a.mode) - rank(b.mode));
+}
+
+/** Tournament card format line: "4 Squad" for battle royale squads (the design), else the mode's name. */
 export function tournamentFormatLabel(game: Game, mode: MatchMode): string {
-  return mode === "SQUAD" ? `${GAME_CONFIG[game].teamSize} Squad` : MODE_LABEL[mode];
+  return mode === "SQUAD" ? `${GAME_CONFIG[game].teamSize} Squad` : gameModeLabel(game, mode);
 }
 
 export interface HomeStat {

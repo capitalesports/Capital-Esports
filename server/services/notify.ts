@@ -19,8 +19,14 @@ export type { NotificationEvent } from "@/lib/notifications";
 
 async function contextFor(event: NotificationEvent): Promise<NotificationContext> {
   if ("matchId" in event && event.matchId) {
-    const m = await db.match.findUnique({ where: { id: event.matchId }, select: { title: true } });
-    return { matchTitle: m?.title };
+    const m = await db.match.findUnique({
+      where: { id: event.matchId },
+      select: { title: true, isEntryList: true, tournament: { select: { format: true } } },
+    });
+    return {
+      matchTitle: m?.title,
+      signUpFormat: m?.isEntryList ? m.tournament?.format : undefined,
+    };
   }
   if (event.type === "TEAM_INVITE") {
     const t = await db.team.findUnique({ where: { id: event.teamId }, select: { name: true } });
@@ -53,7 +59,7 @@ async function emailCopies(userIds: string[], message: NotificationMessage) {
   const content = renderEmail({
     title: message.title,
     body: message.body,
-    link: { url: absoluteUrl(message.url), label: `Open ${SITE_NAME}` },
+    link: { url: absoluteUrl(message.url), label: message.linkLabel ?? `Open ${SITE_NAME}` },
   });
   for (const u of users) {
     try {

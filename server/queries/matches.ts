@@ -144,7 +144,9 @@ export async function getLobbyGroup(
       title: true,
       lobbyNumber: true,
       status: true,
-      _count: { select: { registrations: { where: { status: { in: ["CONFIRMED", "PENDING_PAYMENT"] } } } } },
+      _count: {
+        select: { registrations: { where: { status: { in: ["CONFIRMED", "PENDING_PAYMENT"] } } } },
+      },
     },
   });
   const ids = lobbies.map((l) => l.id);
@@ -211,7 +213,12 @@ export async function getMyMatches(userId: string) {
       status: { in: ["PENDING", "PENDING_PAYMENT", "CONFIRMED", "WAITLISTED", "NO_SHOW"] },
     },
     include: {
-      match: { select: { ...publicMatchSelect, tournament: { select: { title: true } } } },
+      match: {
+        select: {
+          ...publicMatchSelect,
+          tournament: { select: { id: true, title: true, format: true, entryMatchId: true } },
+        },
+      },
       team: { select: { name: true } },
       members: { where: { userId }, select: { status: true } },
     },

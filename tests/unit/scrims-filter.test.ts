@@ -96,7 +96,7 @@ describe("URL query parsing", () => {
 
   it("only accepts modes the selected game has", () => {
     expect(modesFor(null)).toHaveLength(7);
-    expect(modesFor("VALORANT")).toEqual(["ONE_V_ONE", "TWO_V_TWO", "FIVE_V_FIVE"]);
+    expect(modesFor("VALORANT")).toEqual(["ONE_V_ONE", "TWO_V_TWO", "FIVE_V_FIVE", "SOLO"]);
     expect(modesFor("BGMI")).toContain("FOUR_V_FOUR");
     expect(modesFor("BGMI")).not.toContain("FIVE_V_FIVE");
     expect(q({ game: "valorant", mode: "SQUAD" }).mode).toBeNull();

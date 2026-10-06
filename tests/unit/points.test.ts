@@ -47,6 +47,13 @@ describe("points table", () => {
     expect(brPoints(br, { placement: 3, kills: -5 }, false)).toBe(10);
   });
 
+  it("scores Valorant Deathmatch with the default placement table and 1 per kill (M50)", () => {
+    const valorant = defaultPointsConfig("VALORANT");
+    expect(valorant.placementPoints).toEqual([]);
+    expect(brPoints(valorant, { placement: 1, kills: 20 }, false)).toBe(35);
+    expect(brPoints(valorant, { placement: 3, kills: 4 }, true)).toBe(28);
+  });
+
   it("scores Valorant 3 for a win and 0 for a loss", () => {
     expect(valorantPoints(val, { won: true, roundDiff: 5 }, false)).toBe(3);
     expect(valorantPoints(val, { won: false, roundDiff: -5 }, false)).toBe(0);

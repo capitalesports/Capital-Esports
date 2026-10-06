@@ -39,6 +39,9 @@ describe("slots and cancellation", () => {
   });
   it("allows cancelling only before registration closes", () => {
     expect(canCancelRegistration(open, now)).toBe(true);
+    // Paid entries are final (DECISIONS M50); an unpaid attempt can still be dropped.
+    expect(canCancelRegistration({ ...open, entryFeePaise: 7000 }, now)).toBe(false);
+    expect(canCancelRegistration({ ...open, entryFeePaise: 7000 }, now, false)).toBe(true);
     expect(canCancelRegistration({ ...open, registrationClosesAt: now }, now)).toBe(false);
     expect(canCancelRegistration({ ...open, status: "LIVE" }, now)).toBe(false);
   });

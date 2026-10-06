@@ -1,6 +1,6 @@
 /**
- * Tournament logic (pure). Battle royale tournaments sum lobby points across linked matches;
- * Valorant tournaments are single-elimination brackets of 8 or 16 teams.
+ * Tournament logic (pure). Lobby tournaments (Free Fire, BGMI, Valorant Deathmatch) sum points
+ * across their lobby matches; head-to-head tournaments are single-elimination brackets with byes.
  */
 import { MATCH_MODES, type MatchMode } from "./match-modes";
 import { IST_OFFSET_MINUTES } from "./time";
@@ -92,51 +92,84 @@ export function lobbyStandings(results: LobbyResult[]): LobbyStanding[] {
 }
 
 // ---------------------------------------------------------------------------
-// Single-elimination bracket (Valorant)
+// Single-elimination bracket with byes (head-to-head modes; DECISIONS M50)
 // ---------------------------------------------------------------------------
 
-export function isBracketSize(n: number): n is BracketSize {
-  return (BRACKET_SIZES as readonly number[]).includes(n);
-}
-
-export function roundCount(size: BracketSize): number {
-  return Math.log2(size);
+/**
+ * Pair one round's entrants in order (1 v 2, 3 v 4, …). With an odd count the last entrant has
+ * no opponent: it gets a bye and goes straight to the next round.
+ */
+export function pairRound<T>(entrants: T[]): { pairs: [T, T][]; bye: T | null } {
+  const pairs: [T, T][] = [];
+  for (let i = 0; i + 1 < entrants.length; i += 2) pairs.push([entrants[i]!, entrants[i + 1]!]);
+  return { pairs, bye: entrants.length % 2 ? entrants[entrants.length - 1]! : null };
 }
 
 /**
- * Standard seeding order so the top seeds meet as late as possible.
- * 8 -> [1,8,4,5,2,7,3,6]; 16 -> [1,16,8,9,4,13,5,12,2,15,7,10,3,14,6,11].
+ * Who plays the next round: the entrant that had a bye goes first (so it meets a winner and can
+ * never get two byes in a row), then the winners in match order.
  */
-export function seedOrder(size: number): number[] {
-  let order = [1];
-  while (order.length < size) {
-    const n = order.length * 2 + 1;
-    order = order.flatMap((s) => [s, n - s]);
+export function nextRoundEntrants<T>(winners: T[], bye: T | null): T[] {
+  return bye === null ? winners : [bye, ...winners];
+}
+
+export interface BracketRoundState<K> {
+  round: number;
+  entrants: K[];
+  pairs: [K, K][];
+  bye: K | null;
+  /** Winner of each pair (null = not decided yet). */
+  winners: (K | null)[];
+  complete: boolean;
+}
+
+/**
+ * Replay a bracket from its round-1 entrants (sign-up order) and the decided matches: every round
+ * up to the first one still being played. A winner that is not one of the pair counts as undecided.
+ * Byes are never stored; they follow from the entrant count.
+ */
+export function walkBracket<K>(
+  entrants: K[],
+  winnerOf: (round: number, index: number) => K | null,
+): BracketRoundState<K>[] {
+  const rounds: BracketRoundState<K>[] = [];
+  let left = entrants;
+  while (left.length >= 2) {
+    const round = rounds.length + 1;
+    const { pairs, bye } = pairRound(left);
+    const winners = pairs.map(([a, b], i) => {
+      const w = winnerOf(round, i);
+      return w === a || w === b ? w : null;
+    });
+    const complete = winners.every((w) => w !== null);
+    rounds.push({ round, entrants: left, pairs, bye, winners, complete });
+    if (!complete) break;
+    left = nextRoundEntrants(winners as K[], bye);
   }
-  return order;
+  return rounds;
 }
 
-/** Round-1 pairings from entrants listed in seed order (index 0 = seed 1). */
-export function firstRoundPairs<T>(seeded: T[]): [T, T][] {
-  if (!isBracketSize(seeded.length)) throw new Error("Bracket needs exactly 8 or 16 teams");
-  const order = seedOrder(seeded.length);
-  const pairs: [T, T][] = [];
-  for (let i = 0; i < order.length; i += 2)
-    pairs.push([seeded[order[i]! - 1]!, seeded[order[i + 1]! - 1]!]);
-  return pairs;
+export interface RoundShape {
+  round: number;
+  matches: number;
+  /** 1 when an entrant skips this round, else 0. */
+  byes: number;
 }
 
-/** Where the winner of (round, index) plays next. */
-export function nextSlot(
-  round: number,
-  index: number,
-): { round: number; index: number; side: 0 | 1 } {
-  return { round: round + 1, index: Math.floor(index / 2), side: (index % 2) as 0 | 1 };
-}
-
-/** The other match that feeds the same next-round match. */
-export function siblingIndex(index: number): number {
-  return index ^ 1;
+/**
+ * The whole bracket for `entrants` (9 → 4 matches + 1 bye, 2 + 1, 1 + 1, then the final), used to
+ * draw rounds that are not played yet. Empty for fewer than 2 entrants.
+ */
+export function bracketShape(entrants: number): RoundShape[] {
+  const rounds: RoundShape[] = [];
+  let left = entrants;
+  while (left >= 2) {
+    const matches = Math.floor(left / 2);
+    const byes = left % 2;
+    rounds.push({ round: rounds.length + 1, matches, byes });
+    left = matches + byes;
+  }
+  return rounds;
 }
 
 export function roundName(round: number, totalRounds: number): string {
@@ -144,7 +177,7 @@ export function roundName(round: number, totalRounds: number): string {
   if (fromEnd === 0) return "Final";
   if (fromEnd === 1) return "Semifinals";
   if (fromEnd === 2) return "Quarterfinals";
-  return `Round of ${2 ** (fromEnd + 1)}`;
+  return `Round ${round}`;
 }
 
 export interface BracketMatchResult {

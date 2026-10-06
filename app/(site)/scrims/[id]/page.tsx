@@ -25,7 +25,7 @@ import {
 import { isConfirmedPlayer } from "@/server/services/registration";
 import { getContent } from "@/server/services/content";
 import { GAME_CONFIG } from "@/lib/games";
-import { isOpenEntry, lobbyNoun, lobbyWord } from "@/lib/lobbies";
+import { isOpenEntry, lobbyNoun, lobbyWord, takesEveryone } from "@/lib/lobbies";
 import { MODE_LABEL, isHeadToHead, isTeamMode, playersPerSlot } from "@/lib/match-modes";
 import { formatEntryFee, formatINR } from "@/lib/money";
 import { isWithinDisputeWindow } from "@/lib/points";
@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: PageProps<"/scrims/[id]">): P
   return {
     title: match.title,
     description: `${GAME_CONFIG[match.game].name} ${MODE_LABEL[match.mode]} · ${formatIST(match.startsAt)} · ${
-      isOpenEntry(match)
+      takesEveryone(match)
         ? `${match._count.registrations} joined`
         : `${match._count.registrations}/${match.maxSlots} slots`
     }`,

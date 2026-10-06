@@ -13,11 +13,21 @@ export interface OpenEntryFields {
 }
 
 /**
- * Standalone scrims take unlimited entries. Tournament sign-ups (a bracket needs exactly 8 or
- * 16), tournament matches, bracket matches and the extra lobbies themselves keep their capacity.
+ * Standalone scrims take unlimited entries and split into lobbies at close. Tournament matches,
+ * bracket matches and the extra lobbies themselves keep their capacity.
  */
 export function isOpenEntry(m: OpenEntryFields): boolean {
-  return !m.isEntryList && m.tournamentId === null && m.bracketRound === null && m.parentMatchId === null;
+  return (
+    !m.isEntryList && m.tournamentId === null && m.bracketRound === null && m.parentMatchId === null
+  );
+}
+
+/**
+ * Matches that take every registration: open-entry scrims and tournament sign-up lists (split into
+ * lobbies or a bracket when registration closes, DECISIONS M50).
+ */
+export function takesEveryone(m: OpenEntryFields): boolean {
+  return m.isEntryList || isOpenEntry(m);
 }
 
 export interface LobbyPlan {
@@ -44,7 +54,10 @@ export function planLobbies(entries: number, capacity: number, mode: MatchMode):
   const count = Math.ceil(entries / capacity);
   const base = Math.floor(entries / count);
   const extra = entries % count;
-  return { sizes: Array.from({ length: count }, (_, i) => base + (i < extra ? 1 : 0)), unplaced: 0 };
+  return {
+    sizes: Array.from({ length: count }, (_, i) => base + (i < extra ? 1 : 0)),
+    unplaced: 0,
+  };
 }
 
 /** "Lobby" for battle-royale lobbies, "Game" for head-to-head. */
@@ -58,7 +71,65 @@ export function lobbyNoun(mode: MatchMode, count: number): string {
   return count === 1 ? "lobby" : "lobbies";
 }
 
+/**
+ * Duo tournaments (players register one by one and pair up in the lobby): lobbies are split in
+ * pairs so partners stay together, `capacity` and `minSize` in players. An odd player out joins
+ * the last lobby rather than being dropped.
+ */
+export function planDuoTournamentLobbies(
+  players: number,
+  capacity: number,
+  minSize = MIN_TOURNAMENT_LOBBY,
+): LobbyPlan {
+  const pairs = planTournamentLobbies(
+    Math.floor(players / 2),
+    Math.floor(capacity / 2),
+    Math.ceil(minSize / 2),
+  );
+  const sizes = pairs.sizes.map((s) => s * 2);
+  let unplaced = pairs.unplaced * 2;
+  if (players % 2) {
+    if (sizes.length && sizes[sizes.length - 1]! < capacity) sizes[sizes.length - 1]! += 1;
+    else if (sizes.length) unplaced += 1;
+    else sizes.push(1);
+  }
+  return { sizes, unplaced };
+}
+
 /** How many lobbies the current entries would need (for "3 lobbies so far" on cards). */
 export function lobbiesNeeded(entries: number, capacity: number, mode: MatchMode): number {
   return Math.max(1, planLobbies(entries, capacity, mode).sizes.length);
+}
+
+/** A tournament lobby needs at least this many entries, or it is not opened (DECISIONS M50). */
+export const MIN_TOURNAMENT_LOBBY = 10;
+
+/**
+ * Tournament lobbies (Free Fire, BGMI, Valorant Deathmatch; DECISIONS M50): as few lobbies of at
+ * most `capacity` as needed, balanced (52 in lobbies of 48 → 26 + 26). A lobby is never opened
+ * with fewer than MIN_TOURNAMENT_LOBBY entries when that would split a group that could play
+ * together: entries that don't fit are left unplaced (12 Deathmatch players → 10 play, 2 don't).
+ * A tournament with fewer than the minimum in total still plays in one lobby. `minSize` is in
+ * entries (squads: 10 players = 3 squads).
+ */
+export function planTournamentLobbies(
+  entries: number,
+  capacity: number,
+  minSize = MIN_TOURNAMENT_LOBBY,
+): LobbyPlan {
+  if (entries <= 0) return { sizes: [], unplaced: 0 };
+  const needed = Math.ceil(entries / capacity);
+  const count = Math.max(1, Math.min(needed, Math.floor(entries / minSize)));
+  if (count * capacity < entries) {
+    return {
+      sizes: Array.from({ length: count }, () => capacity),
+      unplaced: entries - count * capacity,
+    };
+  }
+  const base = Math.floor(entries / count);
+  const extra = entries % count;
+  return {
+    sizes: Array.from({ length: count }, (_, i) => base + (i < extra ? 1 : 0)),
+    unplaced: 0,
+  };
 }

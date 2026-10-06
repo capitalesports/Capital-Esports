@@ -29,12 +29,13 @@ export const MODE_LABEL: Record<MatchMode, string> = {
 
 /**
  * Modes allowed per game. Battle royales: solo/duo/squad lobbies plus head-to-head custom rooms
- * (Free Fire Clash Squad, BGMI TDM). Valorant is always head-to-head (DECISIONS M1).
+ * (Free Fire Clash Squad, BGMI TDM). Valorant: head-to-head (DECISIONS M1) plus Solo = Deathmatch,
+ * a 10-player free-for-all scored by placement and kills like a lobby (DECISIONS M50).
  */
 export const MODES_FOR_GAME: Record<Game, readonly MatchMode[]> = {
   FREE_FIRE: ["SOLO", "DUO", "SQUAD", "ONE_V_ONE", "TWO_V_TWO", "FOUR_V_FOUR"],
   BGMI: ["SOLO", "DUO", "SQUAD", "ONE_V_ONE", "TWO_V_TWO", "FOUR_V_FOUR"],
-  VALORANT: ["ONE_V_ONE", "TWO_V_TWO", "FIVE_V_FIVE"],
+  VALORANT: ["ONE_V_ONE", "TWO_V_TWO", "FIVE_V_FIVE", "SOLO"],
 };
 
 const HEAD_TO_HEAD_SIZE: Partial<Record<MatchMode, number>> = {

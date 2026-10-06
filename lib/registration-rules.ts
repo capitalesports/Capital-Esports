@@ -39,15 +39,20 @@ export function placementFor(confirmedCount: number, maxSlots: number): "CONFIRM
   return confirmedCount < maxSlots ? "CONFIRMED" : "WAITLISTED";
 }
 
-/** Players may cancel until registration closes. */
+/**
+ * Players may cancel a free entry until registration closes; the slot goes to the next player
+ * (DECISIONS M50). A paid entry is final. An unpaid attempt at a paid match (`paid` false) can
+ * still be dropped while registration is open.
+ */
 export function canCancelRegistration(
-  match: Pick<RegistrationWindow, "status" | "registrationClosesAt">,
+  match: Pick<RegistrationWindow, "status" | "registrationClosesAt" | "entryFeePaise">,
   now: Date,
+  paid = true,
 ) {
-  return (
+  const open =
     (match.status === "REGISTRATION_OPEN" || match.status === "UPCOMING") &&
-    now < match.registrationClosesAt
-  );
+    now < match.registrationClosesAt;
+  return open && (match.entryFeePaise === 0 || !paid);
 }
 
 /** Match statuses in which confirmed players see the room (it's over after these). */

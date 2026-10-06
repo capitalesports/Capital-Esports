@@ -54,7 +54,6 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
     startsAt: "",
     prizePool: "0",
     entryFee: "0",
-    bracketSize: "8",
     rulesMarkdown: "",
     streamUrl: "",
   });
@@ -72,7 +71,7 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
       className="grid max-w-3xl gap-3 sm:grid-cols-2"
       onSubmit={async (e) => {
         e.preventDefault();
-        const r = await run({ ...v, bracketSize: bracket ? v.bracketSize : "" });
+        const r = await run(v);
         if (r.ok) router.push(`/admin/tournaments/${r.data}`);
       }}
     >
@@ -94,8 +93,8 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
         label="Mode"
         help={
           bracket
-            ? "Head-to-head: single-elimination bracket"
-            : `Lobby: placement + kill points across matches. ${capacityText(v.game, v.mode)}.`
+            ? "Head-to-head: single-elimination bracket. Unlimited sign-ups; an odd one out gets a bye."
+            : `Lobby: placement + kill points across matches. Unlimited sign-ups, split into lobbies at close. ${capacityText(v.game, v.mode)}.`
         }
         errors={fieldErrors.mode}
       >
@@ -152,23 +151,6 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
           onChange={(e) => set("entryFee", e.target.value)}
         />
       </FormField>
-      {bracket ? (
-        <FormField
-          id="t-bracket"
-          label="Bracket size"
-          help="Single elimination"
-          errors={fieldErrors.bracketSize}
-        >
-          <NativeSelect
-            id="t-bracket"
-            value={v.bracketSize}
-            onChange={(e) => set("bracketSize", e.target.value)}
-          >
-            <option value="8">8 {v.mode === "ONE_V_ONE" ? "players" : "teams"}</option>
-            <option value="16">16 {v.mode === "ONE_V_ONE" ? "players" : "teams"}</option>
-          </NativeSelect>
-        </FormField>
-      ) : null}
       <FormField id="t-stream" label="Stream URL (optional)" errors={fieldErrors.streamUrl}>
         <Input
           id="t-stream"
@@ -202,13 +184,11 @@ export interface TournamentStructure {
   mode: MatchMode;
   /** IST datetime-local value */
   startsAt: string;
-  /** bracket size (head-to-head only; lobby tournaments take a full lobby) */
-  size: string;
   /** rupees */
   entryFee: string;
 }
 
-/** Start time, mode, size and entry fee: editable only while nobody has signed up and no matches exist. */
+/** Start time, mode and entry fee: editable only while nobody has signed up and no matches exist. */
 function StructureFields({
   s,
   onChange,
@@ -221,7 +201,6 @@ function StructureFields({
   paymentsEnabled: boolean;
 }) {
   const bracket = isHeadToHead(s.mode);
-  const player = s.mode === "ONE_V_ONE" ? "players" : "teams";
   return (
     <>
       <div className="sm:col-span-2">
@@ -249,11 +228,7 @@ function StructureFields({
         <NativeSelect
           id="e-mode"
           value={s.mode}
-          onChange={(e) => {
-            const mode = e.target.value as MatchMode;
-            const size = isHeadToHead(mode) ? (bracket ? s.size : "8") : "";
-            onChange({ ...s, mode, size });
-          }}
+          onChange={(e) => onChange({ ...s, mode: e.target.value as MatchMode })}
         >
           {MODES_FOR_GAME[s.game].map((m) => (
             <option key={m} value={m}>
@@ -262,18 +237,6 @@ function StructureFields({
           ))}
         </NativeSelect>
       </FormField>
-      {bracket ? (
-        <FormField id="e-size" label="Bracket size" errors={fieldErrors.bracketSize}>
-          <NativeSelect
-            id="e-size"
-            value={s.size}
-            onChange={(e) => onChange({ ...s, size: e.target.value })}
-          >
-            <option value="8">8 {player}</option>
-            <option value="16">16 {player}</option>
-          </NativeSelect>
-        </FormField>
-      ) : null}
       <FormField
         id="e-fee"
         label="Entry fee (₹)"
@@ -297,7 +260,7 @@ export function EditTournamentForm({
   paymentsEnabled,
 }: {
   t: { id: string; title: string; prizePool: string; rulesMarkdown: string; streamUrl: string };
-  /** Present only while start, mode, size and entry fee may still change. */
+  /** Present only while start, mode and entry fee may still change. */
   structure?: TournamentStructure;
   paymentsEnabled: boolean;
 }) {
@@ -321,7 +284,6 @@ export function EditTournamentForm({
                   startsAt: s.startsAt,
                   mode: s.mode,
                   entryFee: s.entryFee,
-                  ...(isHeadToHead(s.mode) ? { bracketSize: s.size } : {}),
                 }
               : {}),
           });
@@ -385,21 +347,12 @@ export function LobbyMatchesForm({
 }: {
   tournamentId: string;
   defaultStart: string;
-  /** Entries are locked (sign-up list closed): no more matches or locking. */
+  /** Registration closed: entries are split into lobbies (new matches are split the same way). */
   locked: boolean;
 }) {
   const [v, setV] = useState({ count: "3", firstStartsAt: defaultStart, gapMinutes: "45" });
   const add = useAction(addLobbyMatchesAction);
   const lock = useAction(lockEntriesAction);
-  if (locked) {
-    return (
-      <Box title="Lobby matches">
-        <p className="text-muted-foreground text-sm">
-          Entries are locked: every confirmed entry is in every lobby match.
-        </p>
-      </Box>
-    );
-  }
   return (
     <Box title="Lobby matches">
       <form
@@ -443,13 +396,22 @@ export function LobbyMatchesForm({
           Add matches
         </Button>
       </form>
-      <p className="text-muted-foreground text-sm">
-        When sign-ups are done, lock entries: every confirmed entry is entered into every lobby
-        match (rosters included).
-      </p>
-      <Button disabled={lock.pending} onClick={() => lock.run({ tournamentId })}>
-        Lock entries
-      </Button>
+      {locked ? (
+        <p className="text-muted-foreground text-sm">
+          Registration is closed and entries are split into lobbies, the same lobby in every match.
+          Matches added now are split the same way.
+        </p>
+      ) : (
+        <>
+          <p className="text-muted-foreground text-sm">
+            Registration closes 30 minutes before the start; entries are then split into balanced
+            lobbies (no match added = one match at the start time). Close it now instead:
+          </p>
+          <Button disabled={lock.pending} onClick={() => lock.run({ tournamentId })}>
+            Close registration and split lobbies
+          </Button>
+        </>
+      )}
     </Box>
   );
 }
@@ -457,12 +419,10 @@ export function LobbyMatchesForm({
 export function GenerateBracketForm({
   tournamentId,
   defaultStart,
-  size,
   confirmed,
 }: {
   tournamentId: string;
   defaultStart: string;
-  size: number;
   confirmed: number;
 }) {
   const [start, setStart] = useState(defaultStart);
@@ -470,8 +430,9 @@ export function GenerateBracketForm({
   return (
     <Box title="Bracket">
       <p className="text-muted-foreground text-sm">
-        {confirmed}/{size} entries confirmed. Generating closes sign-ups and seeds teams by sign-up
-        order (1v{size}, …).
+        {confirmed} entries confirmed. Registration closes 30 minutes before the start and the
+        bracket is drawn in sign-up order (1v2, 3v4, …); an odd one out gets a bye to the next
+        round. Draw it now instead:
       </p>
       <form
         className="flex flex-wrap items-end gap-2"
@@ -496,7 +457,7 @@ export function GenerateBracketForm({
           </FormField>
         </div>
         <Button type="submit" disabled={pending}>
-          Generate bracket
+          Draw bracket now
         </Button>
       </form>
     </Box>

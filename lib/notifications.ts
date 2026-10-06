@@ -21,6 +21,12 @@ export type NotificationEvent =
   | { type: "ANNOUNCEMENT"; userIds: string[]; title: string; body: string; url: string | null }
   | { type: "LOBBY_ASSIGNED"; userIds: string[]; matchId: string; lobby: string }
   | { type: "LOBBY_UNPLACED"; userIds: string[]; matchId: string }
+  /** Tournament registration closed: the player's lobby (the lobby match). DECISIONS M50. */
+  | { type: "TOURNAMENT_LOBBY"; userIds: string[]; matchId: string; lobby: number }
+  /** Tournament registration closed and every lobby was full (the sign-up list). */
+  | { type: "TOURNAMENT_UNPLACED"; userIds: string[]; matchId: string }
+  /** Tournament registration closed and the bracket is drawn (the player's first match). */
+  | { type: "BRACKET_READY"; userIds: string[]; matchId: string }
   /** A player won a prize (scrim winner, tournament podium payee). DECISIONS M28. */
   | {
       type: "PRIZE_WON";
@@ -50,6 +56,9 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   "ANNOUNCEMENT",
   "LOBBY_ASSIGNED",
   "LOBBY_UNPLACED",
+  "TOURNAMENT_LOBBY",
+  "TOURNAMENT_UNPLACED",
+  "BRACKET_READY",
   "PRIZE_WON",
 ];
 
@@ -60,6 +69,8 @@ const PLACE_WORD: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd" };
 
 export interface NotificationContext {
   matchTitle?: string;
+  /** The match is a tournament sign-up list: lobby or bracket comes when registration closes (M50). */
+  signUpFormat?: "LOBBY_POINTS" | "BRACKET";
   teamName?: string;
   amount?: string;
 }
@@ -69,6 +80,8 @@ export interface NotificationMessage {
   title: string;
   body: string;
   url: string;
+  /** Email button text (default "Open <site>"). */
+  linkLabel?: string;
 }
 
 const PAYOUT_WORDS: Record<string, string> = {
@@ -87,6 +100,16 @@ export function messageFor(
   const matchUrl = "matchId" in event && event.matchId ? `/scrims/${event.matchId}` : "/dashboard";
   switch (event.type) {
     case "REGISTRATION_CONFIRMED":
+      if (ctx.signUpFormat) {
+        const what = ctx.signUpFormat === "BRACKET" ? "bracket" : "lobby number";
+        return {
+          type: event.type,
+          title: "Slot confirmed",
+          body: `You're in for ${match}. After registration closes, check your ${what} on the dashboard.`,
+          url: "/dashboard",
+          linkLabel: `Check your ${ctx.signUpFormat === "BRACKET" ? "bracket" : "lobby"} on the dashboard`,
+        };
+      }
       return {
         type: event.type,
         title: "Slot confirmed",
@@ -193,6 +216,27 @@ export function messageFor(
         body: `${match} had an odd number of entries, so you have no opponent yet. An admin will place you; if not, your entry is refunded at the start.`,
         url: matchUrl,
       };
+    case "TOURNAMENT_LOBBY":
+      return {
+        type: event.type,
+        title: `You're in Lobby ${event.lobby}`,
+        body: `Registration has closed. You play ${match} in Lobby ${event.lobby}. The room ID and password appear on your dashboard once the host shares them.`,
+        url: "/dashboard",
+      };
+    case "TOURNAMENT_UNPLACED":
+      return {
+        type: event.type,
+        title: "No lobby place",
+        body: `Every lobby of ${match} was full when registration closed, so you could not get a place. Any entry fee is refunded.`,
+        url: matchUrl,
+      };
+    case "BRACKET_READY":
+      return {
+        type: event.type,
+        title: "The bracket is out",
+        body: "Registration has closed and the bracket is drawn. Check your games on the dashboard.",
+        url: "/dashboard",
+      };
     case "PRIZE_WON":
       return {
         type: event.type,
@@ -219,6 +263,9 @@ export const PUSH_EVENTS: ReadonlySet<NotificationType> = new Set([
   "ANNOUNCEMENT",
   "LOBBY_ASSIGNED",
   "LOBBY_UNPLACED",
+  "TOURNAMENT_LOBBY",
+  "TOURNAMENT_UNPLACED",
+  "BRACKET_READY",
   "PRIZE_WON",
 ]);
 

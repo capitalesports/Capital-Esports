@@ -22,6 +22,9 @@ const SAMPLE: Record<NotificationEvent["type"], NotificationEvent> = {
   ANNOUNCEMENT: { type: "ANNOUNCEMENT", userIds: ["u"], title: "Diwali cup", body: "Registrations open Friday.", url: "/tournaments" },
   LOBBY_ASSIGNED: { type: "LOBBY_ASSIGNED", userIds: ["u"], matchId: "m2", lobby: "Lobby 2" },
   LOBBY_UNPLACED: { type: "LOBBY_UNPLACED", userIds: ["u"], matchId: "m1" },
+  TOURNAMENT_LOBBY: { type: "TOURNAMENT_LOBBY", userIds: ["u"], matchId: "m2", lobby: 2 },
+  TOURNAMENT_UNPLACED: { type: "TOURNAMENT_UNPLACED", userIds: ["u"], matchId: "m1" },
+  BRACKET_READY: { type: "BRACKET_READY", userIds: ["u"], matchId: "m3" },
   PRIZE_WON: { type: "PRIZE_WON", userIds: ["u"], amountPaise: 45_400, place: 1, eventTitle: "Solo Rush" },
 };
 

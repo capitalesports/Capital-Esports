@@ -9,6 +9,11 @@ import {
 } from "@/server/services/lobbies";
 import { applyTransition } from "@/server/services/match-status";
 import {
+  finishEntriesClosed,
+  onEntriesClosed,
+  type EntriesClosed,
+} from "@/server/services/tournaments";
+import {
   cancelMatchInTx,
   finishCancellation,
   notifyResultsOpen,
@@ -39,14 +44,15 @@ interface Candidate {
   minSlots: number;
   isEntryList: boolean;
   bracketRound: number | null;
+  tournamentId: string | null;
 }
 
 /**
- * Minimum-slot rule applies to playable, non-bracket matches (sign-up lists are never played;
- * bracket sides are filled by the bracket, not by registration).
+ * Minimum-slot rule applies to scrims (sign-up lists are never played; tournament lobby and
+ * bracket matches are filled from the sign-up list, not by registration).
  */
 function hasMinimum(m: Candidate): boolean {
-  return !m.isEntryList && m.bracketRound === null && m.minSlots > 0;
+  return !m.isEntryList && m.tournamentId === null && m.bracketRound === null && m.minSlots > 0;
 }
 
 /** Inside the close transaction: cancel (and refund) when fewer than minSlots entries are confirmed. */
@@ -83,6 +89,7 @@ export async function runMatchStatusJob(now = new Date()): Promise<TransitionRec
           registrationOpensAt: null,
           registrationClosesAt: { lte: now },
           isEntryList: false,
+          tournamentId: null,
           bracketRound: null,
           minSlots: { gt: 0 },
         },
@@ -106,6 +113,7 @@ export async function runMatchStatusJob(now = new Date()): Promise<TransitionRec
       minSlots: true,
       isEntryList: true,
       bracketRound: true,
+      tournamentId: true,
     },
     take: 500,
   });
@@ -123,15 +131,20 @@ export async function runMatchStatusJob(now = new Date()): Promise<TransitionRec
       if (!to && !neverOpened) break;
       let cancellation: MatchCancellation | null = null;
       let split: LobbySplit | null = null;
+      let closed: EntriesClosed | null = null;
       try {
-        ({ cancellation, split } = await db.$transaction(async (tx) => {
-          if (!to) return { cancellation: await cancelIfShort(tx, match, match.status), split: null };
+        ({ cancellation, split, closed } = await db.$transaction(async (tx) => {
+          const none = { cancellation: null, split: null, closed: null };
+          if (!to) return { ...none, cancellation: await cancelIfShort(tx, match, match.status) };
           await applyTransition(tx, match.id, match.status, to, { actorId: null });
-          if (to !== "REGISTRATION_CLOSED") return { cancellation: null, split: null };
+          if (to !== "REGISTRATION_CLOSED") return none;
+          // Tournament sign-ups: split into lobbies or draw the bracket (DECISIONS M50).
+          if (match.isEntryList)
+            return { ...none, closed: await onEntriesClosed(tx, match.id, null) };
           const short = hasMinimum(match) ? await cancelIfShort(tx, match, to) : null;
-          if (short) return { cancellation: short, split: null };
+          if (short) return { ...none, cancellation: short };
           // Open entry: more entries than one lobby holds become more lobbies.
-          return { cancellation: null, split: await splitIntoLobbies(tx, match.id, null) };
+          return { ...none, split: await splitIntoLobbies(tx, match.id, null) };
         }));
       } catch (e) {
         // Another run (or an admin) moved it first: stop here, the next run re-evaluates.
@@ -146,6 +159,7 @@ export async function runMatchStatusJob(now = new Date()): Promise<TransitionRec
       }
       if (!to) break;
       await sendLobbyNotices(split);
+      await finishEntriesClosed(closed);
       if (to === "LIVE") await releaseUnplaced(match.id);
       if (match.status === "LIVE" && to === "RESULTS_PENDING") await notifyResultsOpen(match.id);
       match = { ...match, status: to };
