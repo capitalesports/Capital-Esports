@@ -636,3 +636,6 @@ At the owner's request (built on localhost first, deployed after approval):
   - **The bracket** draws gold lines with arrows from each game to the next round (`lib/bracket-layout.ts`).
   - **Mode names** (`gameModeLabel`): Valorant Solo = Deathmatch, Valorant 2v2 = Scrims; Free Fire 1v1/2v2 = Lone Wolf, 4v4 = Clash Squad; BGMI 4v4 = TDM, other head-to-head = TDM 1v1/2v2.
   - **Mode buttons** have a fixed order per game (`sortByModeOrder`): Valorant Deathmatch, Scrims, 5v5, 1v1; Free Fire/BGMI Solo, Duo, Squad, then head-to-head.
+
+### M51 One email only: the slot confirmation
+At the owner's request, the only notification email is the slot confirmation (`REGISTRATION_CONFIRMED`, and `WAITLIST_PROMOTED` when a waitlisted player gets a slot). The 30-minute reminder and match cancellations are now bell-only (plus push, if turned on). This replaces M47. Account emails (sign-up and verification codes, login codes) are unchanged.

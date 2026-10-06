@@ -270,15 +270,13 @@ export const PUSH_EVENTS: ReadonlySet<NotificationType> = new Set([
 ]);
 
 /**
- * Events also emailed to players with a verified email who kept email notifications on. Only three
- * (DECISIONS M47), to stay within the daily email quota: the slot is confirmed (including from the
- * waitlist), the match starts in 30 minutes, the match is cancelled. Everything else is in-app only.
+ * Events also emailed to players with a verified email who kept email notifications on. Only the
+ * slot confirmation (DECISIONS M51; including a slot won from the waitlist), to stay within the
+ * daily email quota. The 30-minute reminder, cancellations and everything else are in-app only.
  */
 export const EMAIL_EVENTS: ReadonlySet<NotificationType> = new Set([
   "REGISTRATION_CONFIRMED",
   "WAITLIST_PROMOTED",
-  "MATCH_STARTING_SOON",
-  "MATCH_CANCELLED",
 ]);
 
 /** Events worth an out-of-app reminder (WhatsApp/SMS channel). */

@@ -165,13 +165,17 @@ describe("email notifications", () => {
     const m = await createMatch(admin.id, {});
     stubOutbox.length = 0;
     await notify({
-      type: "MATCH_CANCELLED",
+      type: "REGISTRATION_CONFIRMED",
       userIds: [on.id, off.id, none.id],
       matchId: m.id,
-      reason: "Server outage",
     });
     expect(stubOutbox.map((x) => x.to)).toEqual(["on@example.in"]);
     expect(stubOutbox[0]!.text).toContain(`/scrims/${m.id}`);
+    // The reminder and cancellations are bell-only (DECISIONS M51).
+    stubOutbox.length = 0;
+    await notify({ type: "MATCH_STARTING_SOON", userIds: [on.id], matchId: m.id });
+    await notify({ type: "MATCH_CANCELLED", userIds: [on.id], matchId: m.id, reason: "Outage" });
+    expect(stubOutbox).toHaveLength(0);
   });
 
   it("sends no email for bell-only events such as announcements and prizes (DECISIONS M47)", async () => {
