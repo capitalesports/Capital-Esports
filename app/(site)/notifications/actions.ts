@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { runAction } from "@/server/action";
 import { requireUser } from "@/server/auth/guards";
 import {
+  clearMyNotifications,
   disablePush,
   markAllNotificationsRead,
   markNotificationRead,
@@ -22,6 +23,13 @@ export async function markAllReadAction() {
     await markAllNotificationsRead(await requireUser());
     revalidatePath("/", "layout");
   }, "All caught up");
+}
+
+export async function clearNotificationsAction() {
+  return runAction(async () => {
+    await clearMyNotifications(await requireUser());
+    revalidatePath("/", "layout");
+  }, "Notifications cleared");
 }
 
 export async function savePushSubscriptionAction(input: {

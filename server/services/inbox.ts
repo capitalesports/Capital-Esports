@@ -50,6 +50,13 @@ export async function markAllNotificationsRead(actor: Actor | null) {
   return count;
 }
 
+/** Delete every notification of the player (their own only). */
+export async function clearMyNotifications(actor: Actor | null) {
+  const me = assertUser(actor);
+  const { count } = await db.notification.deleteMany({ where: { userId: me.id } });
+  return count;
+}
+
 const subscriptionSchema = z.object({
   endpoint: z.string().url().startsWith("https://").max(1000),
   keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(8).max(100) }),

@@ -2,7 +2,11 @@
 
 import { IntentLink as Link } from "@/components/common/intent-link";
 import { useRouter } from "next/navigation";
-import { markAllReadAction, markReadAction } from "@/app/(site)/notifications/actions";
+import {
+  clearNotificationsAction,
+  markAllReadAction,
+  markReadAction,
+} from "@/app/(site)/notifications/actions";
 import { useAction } from "@/components/common/use-action";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -20,14 +24,28 @@ export function InboxList({ items }: { items: InboxItem[] }) {
   const router = useRouter();
   const markOne = useAction(markReadAction);
   const markAll = useAction(markAllReadAction);
+  const clear = useAction(clearNotificationsAction);
   const unread = items.filter((i) => !i.read).length;
 
   return (
     <div className="space-y-3">
-      {unread ? (
-        <Button variant="outline" disabled={markAll.pending} onClick={() => markAll.run()}>
-          Mark all as read
-        </Button>
+      {items.length ? (
+        <div className="flex flex-wrap gap-2">
+          {unread ? (
+            <Button variant="outline" disabled={markAll.pending} onClick={() => markAll.run()}>
+              Mark all as read
+            </Button>
+          ) : null}
+          <Button
+            variant="outline"
+            disabled={clear.pending}
+            onClick={() => {
+              if (confirm("Delete all your notifications?")) void clear.run();
+            }}
+          >
+            Clear all
+          </Button>
+        </div>
       ) : null}
       <ul className="space-y-2" aria-label="Notifications">
         {items.map((n) => (

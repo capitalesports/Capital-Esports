@@ -20,7 +20,7 @@ vi.mock("@/server/providers/notification-channels", () => ({
 
 const { notify } = await import("@/server/services/notify");
 const { runReminderJob } = await import("@/server/jobs/reminder-job");
-const { listMyNotifications, markAllNotificationsRead, markNotificationRead, savePushSubscription, disablePush, unreadCount } = await import(
+const { clearMyNotifications, listMyNotifications, markAllNotificationsRead, markNotificationRead, savePushSubscription, disablePush, unreadCount } = await import(
   "@/server/services/inbox"
 );
 
@@ -127,6 +127,11 @@ describe("inbox", () => {
     expect(await unreadCount(a.id)).toBe(0);
     expect(await unreadCount(b.id)).toBe(1);
     await expect(listMyNotifications(null)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    // Clear all deletes only the player's own notifications.
+    await expect(clearMyNotifications(null)).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect(await clearMyNotifications(player(a))).toBe(2);
+    expect(await testDb().notification.count({ where: { userId: a.id } })).toBe(0);
+    expect(await testDb().notification.count({ where: { userId: b.id } })).toBe(1);
   });
 
   it("validates push subscriptions and lets players turn push off", async () => {
