@@ -82,6 +82,17 @@ export async function openCheckout(
       description: rzp.description,
       prefill: rzp.prefill,
       theme: { color: DS.gold },
+      // UPI first (GPay / PhonePe / Paytm apps on phones, a QR code on computers); cards,
+      // netbanking and wallets stay available below it.
+      config: {
+        display: {
+          blocks: {
+            upi: { name: "Pay with UPI or QR", instruments: [{ method: "upi" }] },
+          },
+          sequence: ["block.upi"],
+          preferences: { show_default_blocks: true },
+        },
+      },
       handler: async (response: RazorpayResponse) => {
         const confirmed = await confirmRazorpayPaymentAction(response);
         if (!confirmed.ok) toast.error(confirmed.error);
