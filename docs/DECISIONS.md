@@ -639,3 +639,21 @@ At the owner's request (built on localhost first, deployed after approval):
 
 ### M51 One email only: the slot confirmation
 At the owner's request, the only notification email is the slot confirmation (`REGISTRATION_CONFIRMED`, and `WAITLIST_PROMOTED` when a waitlisted player gets a slot). The 30-minute reminder and match cancellations are now bell-only (plus push, if turned on). This replaces M47. Account emails (sign-up and verification codes, login codes) are unchanged.
+
+### M52 Referrals: link or code, tracked to (paid) slots
+At the owner's request, players can refer friends and staff can see what the referred players book.
+- **Sharing:** "Refer friends" in the account menu (`/refer`) shows the player's code (name + 3 characters, e.g. KHUSHIW7T, created on first visit) and link `capitalesports.in/r/CODE`, with copy, WhatsApp and share buttons.
+- **Signing up:**
+  - The link stores the code in a 30-day cookie (`ce_ref`) and opens sign-up with the code filled in.
+  - The sign-up page also has an optional "Referral code" box, which writes the same cookie, so it works for email and Google sign-up alike.
+- **Crediting** (`claimReferral`): only a brand-new account (created within 24 hours), once, never to oneself, never to a banned or deleted referrer. It is audited (`referral.claim`). A referral problem never blocks the login.
+- **Tracking:**
+  - A booked slot is a CONFIRMED or NO_SHOW registration; a paid slot is a PAID payment.
+  - Players see how many joined, booked and played a paid match, and the names, but never amounts.
+  - Admin → Referrals lists each referrer (joined, booked, paid players, slots, paid slots, entry fees, last paid) for the last 7 days, 30 days or all time, with a detail page per referrer and a CSV download.
+- **Reward:**
+  - Every 5 referred players who each book a paid slot earn the referrer 1 free slot, repeating (10 → 2, …).
+  - `referralRewardsFor` counts referred players with a PAID payment, minus free slots used on entries that still stand. A cancelled entry gives its free slot back.
+  - On a paid entry waiting for payment, "Use a free slot" (`redeemReferralCredit`) confirms it without paying. It is recorded in `ReferralCreditUse`, the pending payment is marked FAILED, and the action is audited (`referral.redeem`). If the gateway payment completes anyway, the payment wins and the free slot returns.
+  - The Refer page highlights the offer with a progress bar; the admin report shows free slots earned.
+  - There are no cash or wallet rewards (gaming-law and gateway risk).

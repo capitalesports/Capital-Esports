@@ -11,6 +11,7 @@ import {
 } from "@/server/services/registration";
 import { submitResult } from "@/server/services/results";
 import { confirmRazorpayPayment, startCheckout } from "@/server/services/payments";
+import { redeemReferralCredit } from "@/server/services/referrals";
 
 function refresh(matchId: string) {
   revalidatePath(`/scrims/${matchId}`);
@@ -86,4 +87,14 @@ export async function confirmRazorpayPaymentAction(input: {
   razorpay_signature: string;
 }) {
   return runAction(async () => confirmRazorpayPayment(await requireUser(), input));
+}
+
+/** Spend a referral free slot on my entry that is waiting for payment (DECISIONS M52). */
+export async function redeemFreeSlotAction(input: { matchId: string }) {
+  return runAction(async () => {
+    await redeemReferralCredit(await requireUser(), input);
+    refresh(input.matchId);
+    revalidatePath("/tournament", "layout");
+    revalidatePath("/refer");
+  }, "Free slot used. Your slot is confirmed.");
 }

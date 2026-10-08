@@ -316,7 +316,11 @@ export async function applyPaymentEvent(
       events.push({ type: "REGISTRATION_CONFIRMED", userIds: [reg.userId], matchId: match.id });
       return "CONFIRMED";
     }
-    if (reg.status === "CONFIRMED") return "CONFIRMED";
+    if (reg.status === "CONFIRMED") {
+      // Paid after using a referral free slot (M52): the real payment wins, the free slot comes back.
+      await tx.referralCreditUse.deleteMany({ where: { registrationId: reg.id } });
+      return "CONFIRMED";
+    }
     const open =
       ["REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(match.status) && match.startsAt > now;
     // Open-entry scrims have room while registration is open (lobbies are split at close).

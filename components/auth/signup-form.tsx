@@ -15,6 +15,7 @@ import { GoogleLogin } from "./google-login";
 import { OrDivider } from "./login-form";
 import { otpMode } from "./otp-client";
 import { PasswordInput } from "./password-input";
+import { ReferralCodeField } from "./referral-code-field";
 import { useCountdown } from "./use-countdown";
 
 const RESEND_COOLDOWN_MS = 30_000;
@@ -27,7 +28,14 @@ type FieldErrors = Partial<Record<Fields, string[] | undefined>>;
  * Create an account with username, email, date of birth and password (DECISIONS M38), then enter
  * the 6-digit code sent to the email. "Continue with Google" is the one-tap alternative.
  */
-export function SignupForm({ returnTo }: { returnTo: string | null }) {
+export function SignupForm({
+  returnTo,
+  referralCode = null,
+}: {
+  returnTo: string | null;
+  /** From a /r/CODE link (or a code typed earlier). */
+  referralCode?: string | null;
+}) {
   const router = useRouter();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -164,6 +172,7 @@ export function SignupForm({ returnTo }: { returnTo: string | null }) {
               </p>
             )}
           </div>
+          <ReferralCodeField initial={referralCode} />
           <Button type="submit" className="w-full" disabled={busy}>
             {busy ? "Creating account…" : "Create account"}
           </Button>

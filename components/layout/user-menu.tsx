@@ -5,6 +5,7 @@ import { IntentLink as Link } from "@/components/common/intent-link";
 import { useRouter } from "next/navigation";
 import {
   ChevronDownIcon,
+  GiftIcon,
   LayoutDashboardIcon,
   LogOutIcon,
   ShieldIcon,
@@ -44,6 +45,7 @@ export function UserMenu({
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
     { href: "/profile", label: "Profile", icon: UserIcon },
     { href: "/teams", label: "Teams", icon: UsersIcon },
+    { href: "/refer", label: "Refer friends", icon: GiftIcon },
     ...(role === "PLAYER" ? [] : [{ href: "/admin", label: "Admin panel", icon: ShieldIcon }]),
   ];
 

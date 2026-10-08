@@ -12,9 +12,14 @@ describe("admin navigation by role", () => {
   });
 
   it("gives admins everything", () => {
-    expect(sectionsForRole("ADMIN").length).toBe(13);
+    expect(sectionsForRole("ADMIN").length).toBe(14);
     expect(sectionsForRole("ADMIN").map((s) => s.href)).toEqual(
-      expect.arrayContaining(["/admin/points", "/admin/announcements", "/admin/deletion-requests"]),
+      expect.arrayContaining([
+        "/admin/points",
+        "/admin/announcements",
+        "/admin/deletion-requests",
+        "/admin/referrals",
+      ]),
     );
   });
 
@@ -25,6 +30,7 @@ describe("admin navigation by role", () => {
     expect(canAccessAdminPath("MODERATOR", "/admin/points")).toBe(false);
     expect(canAccessAdminPath("MODERATOR", "/admin/announcements")).toBe(false);
     expect(canAccessAdminPath("MODERATOR", "/admin/deletion-requests")).toBe(false);
+    expect(canAccessAdminPath("MODERATOR", "/admin/referrals")).toBe(false);
     expect(canAccessAdminPath("MODERATOR", "/admin/matches/new")).toBe(true);
     expect(canAccessAdminPath("MODERATOR", "/admin")).toBe(true);
     expect(canAccessAdminPath("ADMIN", "/admin/audit")).toBe(true);

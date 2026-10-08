@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { claimReferralFromCookie } from "@/server/auth/referral-cookie";
 import { issueSessionCookie } from "@/server/auth/session";
 import { assertSameOrigin, clientIp, errorResponse } from "@/server/http";
 import { trackOnce } from "@/server/services/analytics";
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
     await trackOnce("LOGIN", user.id);
     const res = NextResponse.json({ ok: true, isNew: true, needsProfile: !user.profileComplete });
     res.cookies.set(cookie.name, cookie.value, cookie.options);
+    await claimReferralFromCookie(user.id, res);
     return res;
   } catch (e) {
     return errorResponse(e);

@@ -12,15 +12,19 @@ import {
 } from "@/lib/profile";
 import { BLOCK_MESSAGE, canCancelRegistration, registrationBlock } from "@/lib/registration-rules";
 import { db } from "@/server/db";
+import { referralRewardsFor } from "@/server/services/referrals";
 import { getMyTeamsForGame, getViewerEntry, waitlistRank, type PublicMatch } from "./matches";
 
-async function pendingPayment(registrationId: string, status: string) {
+async function pendingPayment(registrationId: string, status: string, userId: string) {
   if (status !== "PENDING_PAYMENT") return null;
   const p = await db.payment.findUnique({
     where: { registrationId },
     select: { amountPaise: true, expiresAt: true },
   });
-  return p ? { amountPaise: p.amountPaise, expiresAt: p.expiresAt.toISOString() } : null;
+  if (!p) return null;
+  // Referral reward (M52): free slots the player can spend instead of paying.
+  const { available } = await referralRewardsFor(db, userId);
+  return { amountPaise: p.amountPaise, expiresAt: p.expiresAt.toISOString(), freeSlots: available };
 }
 
 /** Which checkout the client opens: Razorpay, Cashfree sandbox/production, or the local test checkout. */
@@ -58,7 +62,7 @@ export async function buildPanelState(
         igl: m.userId === registration.userId,
         status: m.status,
       })),
-      payment: await pendingPayment(registration.id, registration.status),
+      payment: await pendingPayment(registration.id, registration.status, user.id),
     };
   }
   if (rosterSpot && rosterSpot.registration.status !== "CANCELLED") {

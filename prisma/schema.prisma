@@ -124,34 +124,43 @@ model User {
   googleId                 String?   @unique
   /// Email copies of important notifications (only sent to a verified email).
   emailOptIn               Boolean   @default(true)
+  /// This player's own referral code (created the first time they open "Refer friends").
+  referralCode             String?   @unique
+  /// Who referred this player (set once, when the account is created through a link or code).
+  referredById             String?
+  referredAt               DateTime?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  gameProfiles      GameProfile[]
-  captainOf         Team[]                   @relation("TeamCaptain")
-  teamMemberships   TeamMember[]
-  registrations     Registration[]
-  rosterEntries     RegistrationMember[]
-  pointsEntries     PointsEntry[]
-  createdMatches    Match[]                  @relation("MatchCreatedBy")
-  submittedResults  Result[]                 @relation("ResultSubmittedBy")
-  approvedResults   Result[]                 @relation("ResultApprovedBy")
-  bansCreated       Ban[]                    @relation("BanCreatedBy")
-  auditLogs         AuditLog[]
-  payments          Payment[]
-  payouts           Payout[]
-  payoutMethod      PayoutMethod?
-  notifications     Notification[]
-  pushSubscriptions PushSubscription[]
-  emailCodes        EmailCode[]
-  leaderboardRows   LeaderboardSnapshot[]
-  seasonResults     SeasonResult[]
-  reportsFiled      Report[]                 @relation("ReportReporter")
-  reportsAgainst    Report[]                 @relation("ReportTarget")
-  deletionRequests  AccountDeletionRequest[] @relation("DeletionRequester")
-  deletionDecisions AccountDeletionRequest[] @relation("DeletionDecider")
+  gameProfiles       GameProfile[]
+  captainOf          Team[]                   @relation("TeamCaptain")
+  teamMemberships    TeamMember[]
+  registrations      Registration[]
+  rosterEntries      RegistrationMember[]
+  pointsEntries      PointsEntry[]
+  createdMatches     Match[]                  @relation("MatchCreatedBy")
+  submittedResults   Result[]                 @relation("ResultSubmittedBy")
+  approvedResults    Result[]                 @relation("ResultApprovedBy")
+  bansCreated        Ban[]                    @relation("BanCreatedBy")
+  auditLogs          AuditLog[]
+  payments           Payment[]
+  payouts            Payout[]
+  payoutMethod       PayoutMethod?
+  notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
+  emailCodes         EmailCode[]
+  leaderboardRows    LeaderboardSnapshot[]
+  seasonResults      SeasonResult[]
+  reportsFiled       Report[]                 @relation("ReportReporter")
+  reportsAgainst     Report[]                 @relation("ReportTarget")
+  deletionRequests   AccountDeletionRequest[] @relation("DeletionRequester")
+  deletionDecisions  AccountDeletionRequest[] @relation("DeletionDecider")
+  referredBy         User?                    @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals          User[]                   @relation("Referrals")
+  referralCreditUses ReferralCreditUse[]
 
   @@index([displayName])
+  @@index([referredById])
 }
 
 model GameProfile {
@@ -311,11 +320,12 @@ model Registration {
   updatedAt   DateTime           @updatedAt
   cancelledAt DateTime?
 
-  match   Match                @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  user    User                 @relation(fields: [userId], references: [id])
-  team    Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  members RegistrationMember[]
-  results Result[]
+  match             Match                @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user              User                 @relation(fields: [userId], references: [id])
+  team              Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  members           RegistrationMember[]
+  results           Result[]
+  referralCreditUse ReferralCreditUse?
 
   @@unique([matchId, userId])
   @@index([matchId, status])
@@ -819,4 +829,22 @@ model AccountDeletionRequest {
 
   @@index([status, createdAt])
   @@index([userId, status])
+}
+
+/// A free slot from the referral reward (DECISIONS M52) spent on a paid entry. Earned free slots are
+/// counted from referrals (every 5 referred players with a paid slot = 1); this records the ones
+/// used. A use whose registration is later cancelled gives the free slot back.
+model ReferralCreditUse {
+  id             String   @id @default(cuid())
+  userId         String
+  registrationId String   @unique
+  matchId        String
+  /// The entry fee the free slot covered.
+  valuePaise     Int
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

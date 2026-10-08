@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getGoogleVerifier } from "@/server/auth/google-verifier";
+import { claimReferralFromCookie } from "@/server/auth/referral-cookie";
 import { issueSessionCookie } from "@/server/auth/session";
 import { assertSameOrigin, clientIp, errorResponse } from "@/server/http";
 import { trackOnce } from "@/server/services/analytics";
@@ -24,8 +25,13 @@ export async function POST(request: Request) {
     const cookie = await issueSessionCookie(user.id);
     await trackOnce("LOGIN", user.id);
     if (user.profileComplete) await trackOnce("PROFILE_COMPLETE", user.id);
-    const res = NextResponse.json({ ok: true, isNew: user.isNew, needsProfile: !user.profileComplete });
+    const res = NextResponse.json({
+      ok: true,
+      isNew: user.isNew,
+      needsProfile: !user.profileComplete,
+    });
     res.cookies.set(cookie.name, cookie.value, cookie.options);
+    if (user.isNew) await claimReferralFromCookie(user.id, res);
     return res;
   } catch (e) {
     return errorResponse(e);

@@ -16,6 +16,7 @@ import type { Game } from "@/lib/games";
 import { isTeamMode, type MatchMode } from "@/lib/match-modes";
 import { PHONE_ITEM, PROFILE_ITEMS } from "@/lib/profile";
 import { openCheckout, PayButton, type CheckoutMode } from "./pay-button";
+import { UseFreeSlotButton } from "./use-free-slot-button";
 
 // Only players adding or fixing a game ID need this form: keep it out of the match page's first load.
 const RegistrationDialog = dynamic(() =>
@@ -43,7 +44,7 @@ export type RegistrationPanelState =
       canCancel: boolean;
       teamName: string | null;
       roster: { name: string; igl: boolean; status: string }[];
-      payment: { amountPaise: number; expiresAt: string } | null;
+      payment: { amountPaise: number; expiresAt: string; freeSlots: number } | null;
     }
   | { kind: "ROSTER_INVITE"; captainName: string; teamName: string }
   | { kind: "ON_ROSTER"; captainName: string; teamName: string; registrationStatus: string }
@@ -287,12 +288,17 @@ export function RegistrationPanel({
             {state.status === "WAITLISTED" && state.waitlistRank ? ` (#${state.waitlistRank})` : ""}
           </p>
           {state.status === "PENDING_PAYMENT" && state.payment ? (
-            <PayButton
-              matchId={matchId}
-              amountPaise={state.payment.amountPaise}
-              expiresAt={state.payment.expiresAt}
-              mode={checkoutMode}
-            />
+            <>
+              <PayButton
+                matchId={matchId}
+                amountPaise={state.payment.amountPaise}
+                expiresAt={state.payment.expiresAt}
+                mode={checkoutMode}
+              />
+              {state.payment.freeSlots > 0 ? (
+                <UseFreeSlotButton matchId={matchId} available={state.payment.freeSlots} />
+              ) : null}
+            </>
           ) : null}
           {state.teamName ? (
             <div className="text-sm">

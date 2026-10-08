@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOtpVerifier } from "@/server/auth/otp-verifier";
+import { claimReferralFromCookie } from "@/server/auth/referral-cookie";
 import { issueSessionCookie } from "@/server/auth/session";
 import { assertSameOrigin, clientIp, errorResponse } from "@/server/http";
 import { trackOnce } from "@/server/services/analytics";
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       needsProfile: !user.profileComplete,
     });
     res.cookies.set(cookie.name, cookie.value, cookie.options);
+    if (user.isNew) await claimReferralFromCookie(user.id, res);
     return res;
   } catch (e) {
     return errorResponse(e);
