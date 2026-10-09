@@ -13,14 +13,14 @@ export const REFERRAL_CLAIM_WINDOW_HOURS = 24;
 /** No 0/O or 1/I: codes are read out loud and typed on phones. */
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-/** "khushi7x " → "KHUSHI7X"; null when it can't be a code (4–12 letters/digits). */
+/** "capital7x " → "CAPITAL7X"; null when it can't be a code (4–12 letters/digits). */
 export function normalizeReferralCode(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const code = raw.trim().toUpperCase();
   return /^[A-Z0-9]{4,12}$/.test(code) ? code : null;
 }
 
-/** A new code: up to 6 letters/digits of the player's name, then 3 random characters ("KHUSHI7XK"). */
+/** A new code: up to 6 letters/digits of the player's name, then 3 random characters ("CAPITA7XK"). */
 export function referralCodeFor(name: string | null, random: () => number = Math.random): string {
   const base =
     (name ?? "")

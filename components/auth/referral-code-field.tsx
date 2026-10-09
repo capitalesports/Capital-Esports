@@ -34,7 +34,7 @@ export function ReferralCodeField({ initial }: { initial: string | null }) {
         }}
         autoComplete="off"
         autoCapitalize="characters"
-        placeholder="e.g. KHUSHI7XK"
+        placeholder="e.g. CAPITAL7XK"
         aria-describedby="signup-referral-help"
       />
       <p id="signup-referral-help" className="text-muted-foreground text-xs">
