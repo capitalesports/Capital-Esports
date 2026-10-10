@@ -23,7 +23,11 @@ const schema = z.object({
 let decoy: Promise<string> | null = null;
 
 const WRONG = () =>
-  new AppError("VALIDATION", "Wrong email or password.", { password: ["Wrong email or password"] });
+  new AppError(
+    "VALIDATION",
+    "Wrong email or password. Had an account before the relaunch? Please sign up again.",
+    { password: ["Wrong email or password"] },
+  );
 
 /**
  * Email + password login (staff: DECISIONS M18; players who signed up with a password: M38). Only
@@ -38,8 +42,18 @@ export async function loginWithPassword(
   const email = normalizeEmail(raw);
   if (!email) throw WRONG();
   const rate = "Too many login attempts. Please wait 15 minutes and try again.";
-  await enforceRateLimit(`password:ip:${ip}`, PASSWORD_RATE_LIMITS.perIp.limit, PASSWORD_RATE_LIMITS.perIp.windowSeconds, rate);
-  await enforceRateLimit(`password:${email}`, PASSWORD_RATE_LIMITS.perEmail.limit, PASSWORD_RATE_LIMITS.perEmail.windowSeconds, rate);
+  await enforceRateLimit(
+    `password:ip:${ip}`,
+    PASSWORD_RATE_LIMITS.perIp.limit,
+    PASSWORD_RATE_LIMITS.perIp.windowSeconds,
+    rate,
+  );
+  await enforceRateLimit(
+    `password:${email}`,
+    PASSWORD_RATE_LIMITS.perEmail.limit,
+    PASSWORD_RATE_LIMITS.perEmail.windowSeconds,
+    rate,
+  );
 
   const user = await db.user.findUnique({
     where: { email },

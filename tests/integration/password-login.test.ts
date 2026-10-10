@@ -40,7 +40,7 @@ describe("email + password login", () => {
     ]) {
       await expect(loginWithPassword(input, "2.2.2.2")).rejects.toMatchObject({
         code: "VALIDATION",
-        message: "Wrong email or password.",
+        message: expect.stringContaining("Wrong email or password."),
       });
     }
   });

@@ -712,3 +712,6 @@ Razorpay won't onboard us, so paid entries are collected by the owner's own UPI 
 - **Refunds:** refunds of QR payments are never sent to a gateway. They stay in the refunds list until an admin marks them refunded.
 - **Referral free slots** can replace a QR payment while no proof is waiting for review.
 - Everything is audited (`manualPayment.submit/approve/reject`, `match.paymentQr.set/remove`).
+
+### M55 Relaunch: everyone signs up again
+For the public launch every player account is removed (`scripts/launch-reset.mjs`, M53), so players **sign up** again; the same email (or Google account) simply creates a new account. Until 31 Dec 2026 the login page shows "Capital Esports has relaunched … please sign up again" with a Sign up button (`lib/relaunch.ts`), and a wrong email/password also says "Had an account before the relaunch? Please sign up again."

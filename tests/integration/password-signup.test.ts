@@ -51,7 +51,7 @@ describe("email + password sign-up", () => {
     await expect(
       loginWithPassword({ email: "rohan@example.in", password: "secret-pass-1" }, IP),
     ).rejects.toMatchObject({
-      message: "Wrong email or password.",
+      message: expect.stringContaining("Wrong email or password."),
     });
   });
 
