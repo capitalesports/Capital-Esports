@@ -193,4 +193,5 @@ Refunds go back to the original payment method (UPI, card, net banking or wallet
 If a refund has not reached you, email **capitalesportssupport@gmail.com** with your registered email and the match name.`,
   // A link, not markdown: empty hides the "Watch Video" button on /scrims.
   "scrims.video": "",
+  "tournament.howToRegister": "",
 };

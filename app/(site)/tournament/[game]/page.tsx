@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { IntentLink as Link } from "@/components/common/intent-link";
-import { TrophyIcon } from "lucide-react";
+import { CirclePlayIcon, TrophyIcon } from "lucide-react";
 import { Artwork } from "@/components/common/artwork";
 import { EmptyState } from "@/components/common/empty-state";
 import { Markdown } from "@/components/content/markdown";
@@ -18,7 +18,7 @@ import { WinnersList } from "@/components/tournament/winners-list";
 import { getCurrentUser } from "@/server/auth/session";
 import { getPublicMatch } from "@/server/queries/matches";
 import { buildPanelState, checkoutMode } from "@/server/queries/registration-panel";
-import { getActiveSponsors } from "@/server/services/content";
+import { getActiveSponsors, getContent } from "@/server/services/content";
 import { pointsConfigFor } from "@/server/services/leaderboard";
 import {
   bracketRounds,
@@ -29,7 +29,10 @@ import {
   lobbyStandingsFor,
 } from "@/server/services/tournament-queries";
 import { db } from "@/server/db";
+import { buttonVariants } from "@/components/ui/button";
 import { artKey } from "@/lib/artwork";
+import { contentLink } from "@/lib/content";
+import { cn } from "@/lib/utils";
 import { gameFromSlug, GAME_CONFIG } from "@/lib/games";
 import { sortByModeOrder, tournamentFormatLabel } from "@/lib/home";
 import { formatEntryFee, formatINR } from "@/lib/money";
@@ -88,12 +91,13 @@ export default async function GameTournamentPage({
 
   const basePath = `/tournament/${cfg.slug}`;
   const path = t === current[0] ? basePath : `${basePath}?mode=${t.mode}`;
-  const [entry, matches, user, config, sponsors] = await Promise.all([
+  const [entry, matches, user, config, sponsors, howToRegister] = await Promise.all([
     t.entryMatchId ? getPublicMatch(t.entryMatchId) : null,
     getTournamentMatches(t.id),
     getCurrentUser(),
     pointsConfigFor(db, game),
     getActiveSponsors(),
+    getContent("tournament.howToRegister"),
   ]);
   const panel =
     entry && entry.status === "REGISTRATION_OPEN" ? await buildPanelState(entry, user, path) : null;
@@ -250,6 +254,17 @@ export default async function GameTournamentPage({
                 {entry?.status === "UPCOMING" ? "Sign-ups open soon." : "Sign-ups are closed."}
               </p>
             )}
+            {contentLink(howToRegister) ? (
+              <a
+                href={contentLink(howToRegister)!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(buttonVariants({ variant: "gold-outline" }), "w-full")}
+              >
+                <CirclePlayIcon aria-hidden className="size-4" />
+                How to Register
+              </a>
+            ) : null}
           </section>
           <TournamentPartners
             partners={sponsors.map((s) => ({

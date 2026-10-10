@@ -14,6 +14,7 @@ export const CONTENT_KEYS = [
   "privacy",
   "refund-policy",
   "scrims.video",
+  "tournament.howToRegister",
 ] as const;
 export type ContentKey = (typeof CONTENT_KEYS)[number];
 
@@ -28,10 +29,12 @@ export const CONTENT_LABEL: Record<ContentKey, string> = {
   "refund-policy": "Refund policy",
   "scrims.video":
     'Scrims page — "How scrims work" video link (https, leave empty to hide the button)',
+  "tournament.howToRegister":
+    'Tournament page — "How to Register" video link (https, e.g. YouTube; leave empty to hide the button)',
 };
 
 /** Content keys that hold a single link rather than markdown. */
-export const LINK_CONTENT_KEYS: readonly ContentKey[] = ["scrims.video"];
+export const LINK_CONTENT_KEYS: readonly ContentKey[] = ["scrims.video", "tournament.howToRegister"];
 
 /**
  * Home page settings (Admin → Content → Home page), stored as SiteContent rows under these keys.
