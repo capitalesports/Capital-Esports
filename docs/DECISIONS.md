@@ -634,7 +634,7 @@ At the owner's request (built on localhost first, deployed after approval):
   - **Tournament page.** It never lists the lobby matches (one tournament can have 8+ lobbies). After close it shows a "Lobbies" section: one collapsible card per lobby with its players, and "You're in Lobby N" for the viewer (`getTournamentLobbies`).
   - **Duo lobbies** split in pairs so partners stay together (`planDuoTournamentLobbies`).
   - **The bracket** draws gold lines with arrows from each game to the next round (`lib/bracket-layout.ts`).
-  - **Mode names** (`gameModeLabel`): Valorant Solo = Deathmatch, Valorant 2v2 = Scrims; Free Fire 1v1/2v2 = Lone Wolf, 4v4 = Clash Squad; BGMI 4v4 = TDM, other head-to-head = TDM 1v1/2v2.
+  - **Mode names** (`gameModeLabel`): Valorant Solo = Deathmatch, Valorant 2v2 = Scrims 2v2 (owner wanted "2v2" visible, 2026-10-11); Free Fire 1v1/2v2 = Lone Wolf, 4v4 = Clash Squad; BGMI 4v4 = TDM, other head-to-head = TDM 1v1/2v2.
   - **Mode buttons** have a fixed order per game (`sortByModeOrder`): Valorant Deathmatch, Scrims, 5v5, 1v1; Free Fire/BGMI Solo, Duo, Squad, then head-to-head.
 
 ### M51 One email only: the slot confirmation

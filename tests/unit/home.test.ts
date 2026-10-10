@@ -66,7 +66,7 @@ describe("home copy", () => {
     expect(tournamentFormatLabel("FREE_FIRE", "FOUR_V_FOUR")).toBe("Clash Squad");
     expect(tournamentFormatLabel("BGMI", "TWO_V_TWO")).toBe("TDM 2v2");
     expect(tournamentFormatLabel("VALORANT", "SOLO")).toBe("Deathmatch");
-    expect(tournamentFormatLabel("VALORANT", "TWO_V_TWO")).toBe("Scrims");
+    expect(tournamentFormatLabel("VALORANT", "TWO_V_TWO")).toBe("Scrims 2v2");
     expect(tournamentFormatLabel("BGMI", "FOUR_V_FOUR")).toBe("TDM");
     expect(tournamentFormatLabel("VALORANT", "FIVE_V_FIVE")).toBe("5v5");
     expect(tournamentFormatLabel("FREE_FIRE", "ONE_V_ONE")).toBe("Lone Wolf 1v1");

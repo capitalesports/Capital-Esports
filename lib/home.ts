@@ -32,7 +32,7 @@ export function todayCountLabel(n: number): string {
  */
 export function gameModeLabel(game: Game, mode: MatchMode): string {
   if (game === "VALORANT" && mode === "SOLO") return "Deathmatch";
-  if (game === "VALORANT" && mode === "TWO_V_TWO") return "Scrims";
+  if (game === "VALORANT" && mode === "TWO_V_TWO") return "Scrims 2v2";
   if (game === "FREE_FIRE" && (mode === "ONE_V_ONE" || mode === "TWO_V_TWO"))
     return `Lone Wolf ${MODE_LABEL[mode]}`;
   if (game === "FREE_FIRE" && mode === "FOUR_V_FOUR") return "Clash Squad";
