@@ -267,10 +267,12 @@ export async function notifyResultsOpen(matchId: string) {
 }
 
 export async function setRoomCredentials(actor: Actor | null, input: unknown) {
-  const me = assertModerator(actor);
+  assertModerator(actor);
   const { matchId, roomId, roomPassword } = parseInput(roomCredentialsSchema, input);
   await db.$transaction(async (tx) => {
     const match = await loadMatch(tx, matchId);
+    // Tournament matches are run by admins (DECISIONS M53/M60).
+    const me = assertCanManageMatch(actor, match);
     if (!canSetRoomCredentials(match.status)) {
       throw new AppError("CONFLICT", "Room credentials can only be set before the match ends.");
     }

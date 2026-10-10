@@ -3,6 +3,7 @@ import { runMatchStatusJob } from "@/server/jobs/match-status-job";
 import { listRegisteredTeams, listTeamRegistrationEvents } from "@/server/services/admin-teams";
 import { registerForMatch } from "@/server/services/registration";
 import { deleteTournament } from "@/server/services/tournament-delete";
+import { setRoomCredentials } from "@/server/services/matches";
 import { approveResults, reopenResults, saveResultRows } from "@/server/services/results";
 import {
   getCurrentTournaments,
@@ -1005,5 +1006,44 @@ describe("deleting a tournament (DECISIONS M59)", () => {
     await expect(deleteTournament(admin, { tournamentId: paid.id })).rejects.toMatchObject({
       code: "CONFLICT",
     });
+  });
+});
+
+describe("team codes per matchup (DECISIONS M60)", () => {
+  it("only an admin sets a bracket match's code, and only that match's teams get it", async () => {
+    const t = await createTournament(admin, {
+      game: "VALORANT",
+      mode: "TWO_V_TWO",
+      title: "Codes Cup",
+      startsAt: inDays(3),
+      prizePool: "0",
+    });
+    for (let i = 0; i < 4; i++) {
+      const a = await createPlayer("VALORANT");
+      const b = await createPlayer("VALORANT");
+      const ids = await testDb().gameProfile.findMany({ where: { userId: b.id } });
+      await registerForMatch(
+        { id: a.id, role: "PLAYER" },
+        {
+          matchId: t.entryMatchId!,
+          teamName: `Codes ${i}`,
+          players: ids.map((g) => ({ gameId: g.gameId, ign: g.ign })),
+        },
+      );
+    }
+    const round1 = await generateBracket(admin, {
+      tournamentId: t.id,
+      firstRoundStartsAt: inDays(3),
+    });
+    expect(round1).toHaveLength(2);
+    await expect(
+      setRoomCredentials(mod, { matchId: round1[0]!.id, roomId: "VALO-1" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await setRoomCredentials(admin, { matchId: round1[0]!.id, roomId: "VALO-1" });
+    const [m1, m2] = await Promise.all(
+      round1.map((m) => testDb().match.findUniqueOrThrow({ where: { id: m.id } })),
+    );
+    expect(m1!.roomId).toBe("VALO-1");
+    expect(m2!.roomId).toBeNull();
   });
 });

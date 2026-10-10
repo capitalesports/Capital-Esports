@@ -747,3 +747,11 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 
 - "Delete tournament" box on each admin tournament page, two-step confirm (`deleteTournament`, admin only, audited). It removes the tournament with its sign-up list, lobby/bracket matches, registrations, results and points (leaderboards refreshed, no-show strikes restored, pending prizes voided, its winner carousel items removed).
 - Money is never deleted: if any entry fee was paid (gateway payment, or a UPI proof submitted/approved) or a prize payout is approved/under way, delete is refused; cancel the tournament instead so players are refunded.
+
+## M60 — Team codes sent per matchup / per lobby (2026-10-11)
+
+- Admin tournament page has a "Team codes" panel listing every playable match of the tournament: bracket matchups ("Team A vs Team B") and, for lobby tournaments, each lobby separately. Each row has its own code (Valorant) or room ID + password (Free Fire/BGMI) and a "Send to these teams" button (`setRoomCredentials`). Only the teams registered in that match see the code (dashboard + match page) and get the notification. Filters: Not sent / Sent / All, search by team, 20 rows at a time.
+- Room codes for tournament matches are admin-only now (`assertCanManageMatch`, as for cancel, M53).
+- Next bracket rounds appear in the panel automatically once results are approved, so codes go out round by round.
+- Dashboard: a bracket with more than 8 first-round matches is not drawn inline (it made the page ~11,000px tall); the player sees their own match with its code and a "View full bracket" link.
+- `scripts/demo-h2h-codes.ts`: local-only demo (230 Valorant 2v2 teams, bracket drawn); `--remove` deletes it.

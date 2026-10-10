@@ -247,7 +247,21 @@ export default async function DashboardPage() {
                     </p>
                   ) : null}
                   {signUp && e.match.tournament && brackets.get(e.match.tournament.id) ? (
-                    <BracketView rounds={brackets.get(e.match.tournament.id)!} linkBase="/scrims" />
+                    // Big brackets (100+ teams) would make the dashboard thousands of pixels tall:
+                    // the player's own match is listed here anyway, so link to the full bracket.
+                    brackets.get(e.match.tournament.id)![0]!.matches.length <= 8 ? (
+                      <BracketView
+                        rounds={brackets.get(e.match.tournament.id)!}
+                        linkBase="/scrims"
+                      />
+                    ) : (
+                      <Link
+                        href={`/tournament/${GAME_CONFIG[e.match.game].slug}?t=${e.match.tournament.id}`}
+                        className="text-gold hover:text-gold-hover min-h-tap inline-flex items-center text-sm"
+                      >
+                        View full bracket
+                      </Link>
+                    )
                   ) : null}
                   {!signUp &&
                   e.status === "CONFIRMED" &&

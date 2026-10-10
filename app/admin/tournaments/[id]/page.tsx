@@ -18,6 +18,9 @@ import {
 } from "@/components/tournament/tournament-views";
 import { PaymentQrBox } from "@/components/admin/payment-qr-box";
 import { DeleteTournamentButton } from "@/components/admin/delete-tournament-button";
+import { TeamCodesPanel } from "@/components/admin/team-codes-panel";
+import { listTournamentRooms } from "@/server/queries/tournament-rooms";
+import { roomNeedsPassword } from "@/lib/room-rules";
 import { RegistrationWindowBox } from "@/components/admin/registration-window-box";
 import { requireStaffPage } from "@/server/auth/guards";
 import { db } from "@/server/db";
@@ -41,7 +44,7 @@ export default async function AdminTournamentPage({
   await requireStaffPage(`/admin/tournaments/${id}`);
   const t = await db.tournament.findUnique({ where: { id } });
   if (!t) notFound();
-  const [entry, matches] = await Promise.all([
+  const [entry, matches, rooms] = await Promise.all([
     t.entryMatchId
       ? db.match.findUnique({
           where: { id: t.entryMatchId },
@@ -58,6 +61,7 @@ export default async function AdminTournamentPage({
         })
       : null,
     getTournamentMatches(t.id),
+    listTournamentRooms(t.id),
   ]);
   const standings = t.format === "LOBBY_POINTS" ? await lobbyStandingsFor(db, t.id) : [];
   const bracket =
@@ -204,6 +208,26 @@ export default async function AdminTournamentPage({
           </ol>
         </section>
       </div>
+      {rooms.length && !cancelled ? (
+        <div className="mt-8">
+          <TeamCodesPanel
+            needsPassword={roomNeedsPassword(t.game)}
+            rows={rooms.map((r) => ({
+              id: r.id,
+              label: r.title,
+              startsLabel: formatIST(r.startsAt),
+              teams: r.teams,
+              roomId: r.roomId,
+              roomPassword: r.roomPassword,
+              sent: !!r.roomId,
+              done:
+                r.status === "COMPLETED" ||
+                r.status === "CANCELLED" ||
+                r.status === "RESULTS_PENDING",
+            }))}
+          />
+        </div>
+      ) : null}
       <section className="mt-8 space-y-3" aria-label="Matches">
         <h2 className="text-lg font-semibold">{t.format === "BRACKET" ? "Bracket" : "Matches"}</h2>
         {bracket ? (
