@@ -82,6 +82,40 @@ export async function getCurrentTournaments(game: Game, now = new Date()) {
   });
 }
 
+/**
+ * Every tournament not yet started whose registration is open or opens later, soonest first, with
+ * its sign-up list's times and fee (the /tournament index list).
+ */
+export async function listUpcomingTournaments() {
+  await connection();
+  const list = await db.tournament.findMany({
+    where: {
+      cancelledAt: null,
+      winnersPublishedAt: null,
+      entryList: { status: { in: ["UPCOMING", "REGISTRATION_OPEN"] } },
+    },
+    orderBy: { startsAt: "asc" },
+    take: 30,
+    select: {
+      id: true,
+      game: true,
+      mode: true,
+      title: true,
+      startsAt: true,
+      prizePoolPaise: true,
+      entryList: {
+        select: {
+          status: true,
+          registrationOpensAt: true,
+          registrationClosesAt: true,
+          entryFeePaise: true,
+        },
+      },
+    },
+  });
+  return list.flatMap((t) => (t.entryList ? [{ ...t, entry: t.entryList }] : []));
+}
+
 /** The soonest current tournament for a game (see getCurrentTournaments). */
 export async function getCurrentTournament(game: Game, now = new Date()) {
   return (await getCurrentTournaments(game, now))[0] ?? null;

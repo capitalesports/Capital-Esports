@@ -62,7 +62,7 @@ export function PushOptIn({
         </h2>
         <p className="text-muted-foreground text-sm">
           {support === "unsupported"
-            ? "Install the app to your home screen to get push notifications. Your inbox works everywhere."
+            ? "This browser can't show push notifications. Your inbox works everywhere."
             : support === "denied"
               ? "Notifications are blocked in your browser settings. Your inbox still works."
               : optedIn

@@ -8,7 +8,6 @@ import { RoomPanel } from "@/components/match/room-panel";
 import { StatusPill } from "@/components/match/status-pill";
 import { BracketView } from "@/components/tournament/tournament-views";
 import { MatchHistoryList } from "@/components/profile/match-history-list";
-import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { PushOptIn } from "@/components/pwa/push-opt-in";
 import { Button } from "@/components/ui/button";
 import { vapidPublicKey } from "@/server/providers/notification-channels";
@@ -131,7 +130,6 @@ export default async function DashboardPage() {
       {entries.length ? (
         <div className="mb-8 space-y-3">
           <PushOptIn vapidPublicKey={vapidPublicKey()} optedIn={optedIn} />
-          <InstallPrompt />
         </div>
       ) : null}
 

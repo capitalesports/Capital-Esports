@@ -14,8 +14,18 @@ test("in-app inbox: unread badge, list, mark all read", async ({ page }) => {
       gameProfiles: { create: { game: "FREE_FIRE", gameId: "30130130" } },
       notifications: {
         create: [
-          { type: "MATCH_STARTING_SOON", title: "Starting in 30 minutes", body: "Evening Scrim starts in 30 minutes.", url: "/scrims" },
-          { type: "REGISTRATION_CONFIRMED", title: "Slot confirmed", body: "You're in for Evening Scrim.", url: "/scrims" },
+          {
+            type: "MATCH_STARTING_SOON",
+            title: "Starting in 30 minutes",
+            body: "Evening Scrim starts in 30 minutes.",
+            url: "/scrims",
+          },
+          {
+            type: "REGISTRATION_CONFIRMED",
+            title: "Slot confirmed",
+            body: "You're in for Evening Scrim.",
+            url: "/scrims",
+          },
         ],
       },
     },
@@ -38,8 +48,12 @@ test("in-app inbox: unread badge, list, mark all read", async ({ page }) => {
 
 test("OG images render for a match, a tournament and a rank card", async ({ page, request }) => {
   const db = e2eDb();
-  const match = await db.match.findFirstOrThrow({ where: { isEntryList: false, status: { not: "CANCELLED" } } });
-  const player = await db.user.findFirstOrThrow({ where: { gameProfiles: { some: { game: "FREE_FIRE" } } } });
+  const match = await db.match.findFirstOrThrow({
+    where: { isEntryList: false, status: { not: "CANCELLED" } },
+  });
+  const player = await db.user.findFirstOrThrow({
+    where: { gameProfiles: { some: { game: "FREE_FIRE" } } },
+  });
   const ogOf = async (path: string) => {
     await page.goto(path);
     const content = await page.locator('meta[property="og:image"]').first().getAttribute("content");
@@ -77,7 +91,12 @@ test("OG images render for a match, a tournament and a rank card", async ({ page
 
 test("empty inbox shows the empty-no-notifications artwork slot", async ({ page }) => {
   await e2eDb().user.create({
-    data: { phone: "+919811100302", displayName: "Quiet Inbox", dateOfBirth: new Date("2000-01-01"), gameProfiles: { create: { game: "BGMI", gameId: "5130130130" } } },
+    data: {
+      phone: "+919811100302",
+      displayName: "Quiet Inbox",
+      dateOfBirth: new Date("2000-01-01"),
+      gameProfiles: { create: { game: "BGMI", gameId: "5130130130" } },
+    },
   });
   await loginViaUi(page, "9811100302", "/notifications");
   await page.waitForURL(/\/notifications$/);
@@ -85,14 +104,24 @@ test("empty inbox shows the empty-no-notifications artwork slot", async ({ page 
   await expect(page.locator('[data-artwork="empty-no-notifications"]')).toHaveCount(1);
 });
 
-test("match pages advertise their OG image; manifest, sitemap and robots are served", async ({ page, request }) => {
-  const match = await e2eDb().match.findFirstOrThrow({ where: { isEntryList: false, status: { not: "CANCELLED" } } });
+test("match pages advertise their OG image; manifest, sitemap and robots are served", async ({
+  page,
+  request,
+}) => {
+  const match = await e2eDb().match.findFirstOrThrow({
+    where: { isEntryList: false, status: { not: "CANCELLED" } },
+  });
   await page.goto(`/scrims/${match.id}`);
-  await expect(page.locator('meta[property="og:image"]').first()).toHaveAttribute("content", /opengraph-image/);
+  await expect(page.locator('meta[property="og:image"]').first()).toHaveAttribute(
+    "content",
+    /opengraph-image/,
+  );
 
   const manifest = await (await request.get("/manifest.webmanifest")).json();
-  expect(manifest).toMatchObject({ display: "standalone", start_url: "/dashboard" });
-  expect(manifest.icons.map((i: { sizes: string }) => i.sizes)).toEqual(expect.arrayContaining(["192x192", "512x512"]));
+  expect(manifest).toMatchObject({ display: "browser", start_url: "/dashboard" });
+  expect(manifest.icons.map((i: { sizes: string }) => i.sizes)).toEqual(
+    expect.arrayContaining(["192x192", "512x512"]),
+  );
 
   const sitemap = await (await request.get("/sitemap.xml")).text();
   expect(sitemap).toContain("/leaderboard/bgmi");
@@ -129,5 +158,12 @@ test("the service worker registers and caches only static assets", async ({ page
   });
   expect(cached).toContain("/offline.html");
   expect(cached.length).toBeGreaterThan(1);
-  for (const p of cached) expect(p === "/offline.html" || p.startsWith("/_next/static/") || p.startsWith("/icons/") || p.startsWith("/art/"), p).toBe(true);
+  for (const p of cached)
+    expect(
+      p === "/offline.html" ||
+        p.startsWith("/_next/static/") ||
+        p.startsWith("/icons/") ||
+        p.startsWith("/art/"),
+      p,
+    ).toBe(true);
 });

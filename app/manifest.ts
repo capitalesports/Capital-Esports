@@ -8,7 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: SITE_TAGLINE,
     start_url: "/dashboard",
     scope: "/",
-    display: "standalone",
+    // "browser", not "standalone": the owner doesn't want browsers offering to install the site as an app.
+    display: "browser",
     orientation: "portrait",
     background_color: "#12141f",
     theme_color: "#12141f",
