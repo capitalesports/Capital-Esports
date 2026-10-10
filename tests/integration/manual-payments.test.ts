@@ -185,3 +185,47 @@ describe("transaction IDs", () => {
     expect(normalizeTransactionId("<script>")).toBeNull();
   });
 });
+
+describe("cancelling puts every paid UPI entry in Refunds (DECISIONS M62)", () => {
+  it("approved and submitted-but-unchecked payments wait for a manual refund; unpaid holds expire", async () => {
+    const { listRefunds, markRefundedManually } = await import("@/server/services/refunds");
+    const m = await qrMatch(3);
+    const [approved, submitted, unpaid] = [
+      await createPlayer(),
+      await createPlayer(),
+      await createPlayer(),
+    ];
+    for (const p of [approved, submitted, unpaid])
+      await registerForMatch(player(p), { matchId: m.id });
+    await submitManualPayment(player(approved), proof(m.id, "412345678901"), PNG);
+    await submitManualPayment(player(submitted), proof(m.id, "412345678902"), PNG);
+    const mpApproved = await testDb().manualPayment.findFirstOrThrow({
+      where: { userId: approved.id },
+    });
+    await approveManualPayment(admin, { manualPaymentId: mpApproved.id });
+
+    await cancelMatch(admin, { matchId: m.id, reason: "Server down" });
+
+    const pays = await testDb().payment.findMany({ where: { matchId: m.id } });
+    expect(pays.map((p) => p.status).sort()).toEqual(["REFUND_PENDING", "REFUND_PENDING"]);
+    expect(
+      await testDb().manualPayment.findFirstOrThrow({ where: { userId: submitted.id } }),
+    ).toMatchObject({ status: "REJECTED" });
+    expect(
+      await testDb().manualPayment.findFirstOrThrow({ where: { userId: unpaid.id } }),
+    ).toMatchObject({ status: "EXPIRED" });
+
+    await expect(listRefunds(mod)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const { pending } = await listRefunds(admin);
+    expect(pending).toHaveLength(2);
+    expect(pending.every((r) => r.upiApp === "GOOGLE_PAY")).toBe(true);
+    expect(pending.find((r) => r.user.id === submitted.id)?.refundReason).toMatch(
+      /^Proof not checked/,
+    );
+
+    await markRefundedManually(admin, { paymentId: pending[0]!.id, note: "sent by UPI" });
+    const after = await listRefunds(admin);
+    expect(after.pending).toHaveLength(1);
+    expect(after.done).toHaveLength(1);
+  });
+});

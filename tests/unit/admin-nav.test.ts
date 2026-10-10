@@ -12,7 +12,7 @@ describe("admin navigation by role", () => {
   });
 
   it("gives admins everything", () => {
-    expect(sectionsForRole("ADMIN").length).toBe(15);
+    expect(sectionsForRole("ADMIN").length).toBe(16);
     expect(sectionsForRole("ADMIN").map((s) => s.href)).toEqual(
       expect.arrayContaining([
         "/admin/points",

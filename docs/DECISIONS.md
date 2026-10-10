@@ -760,3 +760,8 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 
 - If registration closed by mistake, the admin Registration box offers "Reopen registration" with a new closing time (in the future, before the start). `reopenRegistration` (admin only, audited) removes what closing created — bracket games, extra lobbies and Lobby 1's copied players and room code — keeps every sign-up, and sets the sign-up list back to REGISTRATION_OPEN. It is drawn again when it closes next time.
 - Only before any game has started (no game past REGISTRATION_CLOSED, no results), not when cancelled or after winners are published. REGISTRATION_CLOSED → REGISTRATION_OPEN is not in the normal state machine; this audited admin undo is the only path.
+
+## M62 — Refunds section; cancelled paid entries go there automatically (2026-10-11)
+
+- New admin section **Refunds** (`/admin/refunds`, admin only): entry fees to give back, grouped by tournament/scrim, each marked "Refund" with the player's phone/email, UPI app, transaction ID and a "Mark refunded" button (refunds are made by hand for now); the latest 50 refunded are listed below. The old list on Prizes is replaced by a link.
+- Cancelling a match or tournament (`enqueueMatchRefunds`) already set approved entries to REFUND_PENDING; now a UPI proof that was submitted but not yet approved also becomes a REFUND_PENDING payment (reason "Proof not checked: …", so the admin checks the money arrived first) and its ManualPayment is closed as REJECTED; slots still waiting for proof are EXPIRED.

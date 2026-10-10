@@ -84,5 +84,6 @@ export async function markRefundedManuallyAction(input: { paymentId: string; not
   return runAction(async () => {
     await markRefundedManually(await requireAdmin(), input);
     revalidatePath("/admin/payouts");
+    revalidatePath("/admin/refunds");
   }, "Marked as refunded");
 }
