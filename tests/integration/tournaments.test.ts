@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runMatchStatusJob } from "@/server/jobs/match-status-job";
+import { listRegisteredTeams, listTeamRegistrationEvents } from "@/server/services/admin-teams";
 import { registerForMatch } from "@/server/services/registration";
 import { approveResults, reopenResults, saveResultRows } from "@/server/services/results";
 import {
@@ -834,5 +835,30 @@ describe("several tournaments per game, editing and cancelling", () => {
     await expect(lockEntries(admin, { tournamentId: t.id })).rejects.toMatchObject({
       code: "CONFLICT",
     });
+  });
+});
+
+describe("admin Teams list", () => {
+  it("lists a tournament team once, not again for each lobby copy", async () => {
+    const t = await createTournament(admin, {
+      game: "BGMI",
+      mode: "SQUAD",
+      title: "CSK Cup",
+      startsAt: inDays(1),
+      prizePool: "0",
+    });
+    await enterTeam(t.entryMatchId!, "BGMI", "CSK", 1);
+    await addLobbyMatches(admin, {
+      tournamentId: t.id,
+      count: 2,
+      firstStartsAt: inDays(1),
+      gapMinutes: 45,
+    });
+    await lockEntries(admin, { tournamentId: t.id });
+    // The team now also sits in both lobby matches, but the admin list shows it once.
+    const rows = await listRegisteredTeams(mod, { game: "BGMI" });
+    expect(rows.filter((r) => r.teamName === "CSK")).toHaveLength(1);
+    const events = await listTeamRegistrationEvents(mod, { game: "BGMI" });
+    expect(events.map((e) => e.name)).toEqual(["CSK Cup"]);
   });
 });

@@ -27,10 +27,17 @@ export async function listTeams(actor: Actor | null, filters: { game?: Game | nu
 }
 
 /** Active entries of every kind: solo players, captain-entered rosters and saved teams. */
+/**
+ * Entries that count once: a tournament entry lives on its sign-up list; the copies made into its
+ * lobby / bracket matches when registration closes are left out, so a team isn't listed twice.
+ */
 function entryWhere(filters: { game?: Game | null }) {
   return {
     status: { not: "CANCELLED" as const },
-    match: { game: filters.game ?? undefined },
+    match: {
+      game: filters.game ?? undefined,
+      OR: [{ tournamentId: null }, { isEntryList: true }],
+    },
   };
 }
 

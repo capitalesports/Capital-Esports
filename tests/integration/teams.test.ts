@@ -105,6 +105,32 @@ describe("join codes (DECISIONS M17)", () => {
   });
 });
 
+describe("team names", () => {
+  it("are unique per game ignoring case: CSK and csk can't both exist, and a double create makes one team", async () => {
+    const a = await createPlayer("BGMI");
+    const b = await createPlayer("BGMI");
+    await createTeam(actor(a), { game: "BGMI", name: "CSK" });
+    await expect(createTeam(actor(b), { game: "BGMI", name: "csk" })).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+    // The same player pressing Create twice at once: still one team.
+    const c = await createPlayer("BGMI");
+    const results = await Promise.allSettled([
+      createTeam(actor(c), { game: "BGMI", name: "Mumbai Kings" }),
+      createTeam(actor(c), { game: "BGMI", name: "Mumbai Kings" }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(await testDb().team.count({ where: { name: "Mumbai Kings" } })).toBe(1);
+    // Two different names at once from the same player: still only one team.
+    const d = await createPlayer("BGMI");
+    await Promise.allSettled([
+      createTeam(actor(d), { game: "BGMI", name: "Delhi One" }),
+      createTeam(actor(d), { game: "BGMI", name: "Delhi Two" }),
+    ]);
+    expect(await testDb().team.count({ where: { captainId: d.id } })).toBe(1);
+  });
+});
+
 describe("team guards", () => {
   it("requires login for every team mutation", async () => {
     for (const call of [

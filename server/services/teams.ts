@@ -43,6 +43,8 @@ export async function createTeam(actor: Actor | null, input: unknown) {
   const { game, name } = parseInput(z.object({ game: z.enum(GAMES), name: teamNameSchema }), input);
   try {
     return await db.$transaction(async (tx) => {
+      // One create at a time per player: two tabs can't make two teams.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"team:create:" + me.id}))`;
       const profile = await tx.gameProfile.findUnique({
         where: { userId_game: { userId: me.id, game } },
       });
@@ -52,6 +54,16 @@ export async function createTeam(actor: Actor | null, input: unknown) {
           `Add your ${GAME_CONFIG[game].idLabel} before creating a team.`,
           { missing: [GAME_CONFIG[game].idLabel] },
         );
+      // "CSK" and "csk" are the same team name (no look-alike duplicates in one game).
+      const clash = await tx.team.findFirst({
+        where: { game, name: { equals: name, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (clash) {
+        throw new AppError("CONFLICT", "That team name is taken for this game.", {
+          name: ["That team name is taken"],
+        });
+      }
       if (await confirmedTeamFor(tx, me.id, game)) {
         throw new AppError(
           "CONFLICT",
