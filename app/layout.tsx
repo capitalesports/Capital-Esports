@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Barlow_Condensed, Inter } from "next/font/google";
 import { LazyToaster } from "@/components/providers/lazy-toaster";
 import { RegisterServiceWorker } from "@/components/pwa/register-sw";
-import { SITE_NAME, SITE_TAGLINE, siteUrl } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
@@ -19,7 +19,26 @@ export const metadata: Metadata = {
     default: `${SITE_NAME} — Free Fire, BGMI & Valorant scrims`,
     template: `%s · ${SITE_NAME}`,
   },
-  description: SITE_TAGLINE,
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: [
+    "Capital Esports",
+    "esports India",
+    "Free Fire tournament",
+    "BGMI tournament",
+    "Valorant tournament India",
+    "Free Fire scrims",
+    "BGMI scrims",
+  ],
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "en_IN",
+  },
+  // Google Search Console ownership check: set GOOGLE_SITE_VERIFICATION in Vercel (DECISIONS M63).
+  ...(process.env.GOOGLE_SITE_VERIFICATION
+    ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } }
+    : {}),
 };
 
 export const viewport: Viewport = {

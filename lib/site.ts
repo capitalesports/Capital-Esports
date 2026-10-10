@@ -6,6 +6,9 @@ export const BRAND_REST = "Esports";
 export const SUPPORT_EMAIL = "capitalesportssupport@gmail.com";
 export const SUPPORT_LOCATION = "New Delhi, India";
 export const SITE_TAGLINE = "Play Daily Scrims · Weekly Tournaments · Climb the Leaderboard";
+/** Search-result description: names the brand, the games and India (DECISIONS M63). */
+export const SITE_DESCRIPTION =
+  "Capital Esports is India's esports platform for Free Fire, BGMI and Valorant: play daily scrims, join weekly tournaments with cash prizes and climb the leaderboard.";
 
 export const SOCIAL_PLATFORMS = [
   "WHATSAPP",

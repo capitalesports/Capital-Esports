@@ -1,4 +1,7 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
+import { SiteJsonLd } from "@/components/seo/site-json-ld";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
 import { GameStripCard } from "@/components/game/game-strip-card";
 import { HomeHero } from "@/components/home/hero";
 import { LeaderboardPreview } from "@/components/home/leaderboard-preview";
@@ -21,6 +24,18 @@ import {
 import { getHomeSettings } from "@/server/services/content";
 import { GAME_LIST, GAMES, isBattleRoyale, type Game } from "@/lib/games";
 import { heroTagline, resolveHeroStats } from "@/lib/home";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "en_IN",
+    url: "/",
+    title: `${SITE_NAME} — Free Fire, BGMI & Valorant scrims`,
+    description: SITE_DESCRIPTION,
+  },
+};
 
 /** Game strip subtitles on the home page (home-desktop.png). */
 const STRIP_SUBTITLE: Record<Game, string> = {
@@ -54,6 +69,7 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-10 pb-6 lg:space-y-12">
+      <SiteJsonLd />
       <HomeHero
         stats={resolveHeroStats(settings, live)}
         todayByGame={todayByGame}

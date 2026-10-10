@@ -765,3 +765,8 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 
 - New admin section **Refunds** (`/admin/refunds`, admin only): entry fees to give back, grouped by tournament/scrim, each marked "Refund" with the player's phone/email, UPI app, transaction ID and a "Mark refunded" button (refunds are made by hand for now); the latest 50 refunded are listed below. The old list on Prizes is replaced by a link.
 - Cancelling a match or tournament (`enqueueMatchRefunds`) already set approved entries to REFUND_PENDING; now a UPI proof that was submitted but not yet approved also becomes a REFUND_PENDING payment (reason "Proof not checked: …", so the admin checks the money arrived first) and its ManualPayment is closed as REJECTED; slots still waiting for proof are EXPIRED.
+
+## M63 — Search engines: brand signals for "Capital Esports" (2026-10-11)
+
+- The name is shared (an Indonesian LoL team, a US advisory firm), so the home page now carries Organization + WebSite JSON-LD (`components/seo/site-json-ld.tsx`: name, "Capital Esports India", logo, New Delhi/IN, support email, the admin's social links as `sameAs`, site search action), a canonical URL, and a description naming the brand, the games and India (`SITE_DESCRIPTION`). Site-wide Open Graph: site name, type, en_IN.
+- Google Search Console ownership: set `GOOGLE_SITE_VERIFICATION` (the HTML-tag code) in Vercel; the root layout outputs the meta tag only when it is set.
