@@ -140,6 +140,18 @@ describe("email codes", () => {
     ).rejects.toMatchObject({ code: "RATE_LIMITED" });
   });
 
+  it("at most 3 login codes per email per day", async () => {
+    await verifiedPlayer("daily@example.in");
+    for (let i = 0; i < 3; i++)
+      await requestEmailLogin({ email: "daily@example.in" }, `10.3.0.${i}`);
+    await expect(
+      requestEmailLogin({ email: "daily@example.in" }, "10.3.0.9"),
+    ).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      message: expect.stringContaining("3 login codes a day"),
+    });
+  });
+
   it("staff accounts never get an email login code", async () => {
     const staff = await createUser({ role: "ADMIN", email: "boss@example.in" });
     await testDb().user.update({ where: { id: staff.id }, data: { emailVerifiedAt: new Date() } });

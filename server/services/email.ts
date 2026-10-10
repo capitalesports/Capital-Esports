@@ -11,6 +11,7 @@ import { consumeRateLimit, enforceRateLimit, peekRateLimit } from "@/server/rate
 import { parseInput } from "@/server/validation";
 import { normalizeEmail } from "@/lib/input-rules";
 import { SITE_NAME } from "@/lib/site";
+import { istDayKey } from "@/lib/time";
 import { isProfileComplete } from "@/lib/profile";
 import { assertUser, type Actor } from "@/lib/roles";
 import { assertAccountCanLogIn, assertPhoneNotBanned } from "./auth";
@@ -22,6 +23,8 @@ export const EMAIL_RATE_LIMITS = {
   perIp: { limit: 20, windowSeconds: 15 * 60 },
   perUser: { limit: 5, windowSeconds: 60 * 60 },
 } as const;
+/** Login codes per email per IST calendar day (owner's rule, DECISIONS M53). */
+export const LOGIN_CODES_PER_DAY = 3;
 
 export const emailField = z.string().transform((v, ctx) => {
   const email = normalizeEmail(v);
@@ -229,6 +232,13 @@ export async function requestEmailLogin(input: unknown, ip: string) {
     EMAIL_RATE_LIMITS.perIp.limit,
     EMAIL_RATE_LIMITS.perIp.windowSeconds,
     rate,
+  );
+  // At most 3 login codes a day per email; the key carries the IST date, so it resets at midnight IST.
+  await enforceRateLimit(
+    `email:login:day:${istDayKey(new Date())}:${email}`,
+    LOGIN_CODES_PER_DAY,
+    2 * 86_400,
+    `You can get at most ${LOGIN_CODES_PER_DAY} login codes a day. Try again tomorrow, or log in with your password or Google.`,
   );
   await enforceRateLimit(
     `email:login:${email}`,

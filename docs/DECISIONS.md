@@ -664,7 +664,7 @@ Before the public launch, the owner asked for a full bug and security check and 
 **Review:** four read-only reviews covered auth/sessions, authorization/data exposure, money/game integrity and web/input security, plus black-box checks on the live site. Nothing critical was found. Fixed:
 - **Login and accounts:**
   - `safeReturnTo` refuses control characters, whitespace and backslashes and must stay on our origin: `/\t/evil.com` was an open redirect after login. Admin content links use the same check (`isSafeSitePath`).
-  - Emailed codes: wrong codes are counted per email across all codes (10 per day, then locked until tomorrow). Staff never get an email login code; they use their password.
+  - Emailed codes: wrong codes are counted per email across all codes (10 per day, then locked until tomorrow). At most 3 login codes per email per IST day (owner's rule; it resets at midnight IST). Staff never get an email login code; they use their password.
   - A pending email sign-up can't be taken over: while its code is out, only the same password (Resend) continues, and anyone else gets CONFLICT.
 - **Rosters:**
   - A player a captain entered by game ID can "Leave this roster" from the dashboard before the match starts (`leaveRoster`).
