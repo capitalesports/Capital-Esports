@@ -375,7 +375,7 @@ export async function listManualPayments(actor: Actor | null) {
         startsAt: true,
         registrationClosesAt: true,
         isEntryList: true,
-        tournament: { select: { title: true } },
+        tournament: { select: { id: true, title: true } },
       },
     },
   } as const;
@@ -389,7 +389,7 @@ export async function listManualPayments(actor: Actor | null) {
     db.manualPayment.findMany({
       where: { status: { in: ["APPROVED", "REJECTED"] } },
       orderBy: { reviewedAt: "desc" },
-      take: 50,
+      take: 1000,
       select,
     }),
   ]);
