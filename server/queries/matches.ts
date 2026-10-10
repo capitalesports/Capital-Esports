@@ -24,6 +24,8 @@ export const publicMatchSelect = {
   maxSlots: true,
   entryFeePaise: true,
   prizePaise: true,
+  /** Manual UPI payments (M54): the QR players pay. */
+  paymentQrUrl: true,
   status: true,
   streamUrl: true,
   cancelReason: true,
@@ -221,6 +223,8 @@ export async function getMyMatches(userId: string) {
       },
       team: { select: { name: true } },
       members: { where: { userId }, select: { status: true } },
+      // Manual UPI payment (M54): pay / waiting for approval / rejected.
+      manualPayment: { select: { status: true } },
     },
     orderBy: { match: { startsAt: "asc" } },
   });

@@ -50,6 +50,7 @@ export async function lockMatch(tx: Tx, matchId: string) {
       registrationClosesAt: true,
       maxSlots: true,
       entryFeePaise: true,
+      paymentQrUrl: true,
       isEntryList: true,
       tournamentId: true,
       bracketRound: true,
@@ -105,7 +106,7 @@ async function alreadyInMatch(tx: Tx, matchId: string, userIds: string[]) {
  */
 export async function promoteWaitlist(
   tx: Tx,
-  match: Pick<LockedMatch, "id" | "maxSlots" | "entryFeePaise">,
+  match: Pick<LockedMatch, "id" | "maxSlots" | "entryFeePaise" | "paymentQrUrl">,
 ): Promise<string[]> {
   const promoted: string[] = [];
   let taken = await slotsTaken(tx, match.id);
@@ -295,7 +296,8 @@ export async function registerForMatch(
     if (match.entryFeePaise > 0 && !user.phone && paymentProvider() === "cashfree") {
       throw new AppError("PROFILE_INCOMPLETE", PHONE_FOR_MONEY_MESSAGE, { missing: [PHONE_ITEM] });
     }
-    const block = registrationBlock(user, match, now, paymentsEnabled());
+    // A paid match takes entries when online payments are on, or by its UPI QR (M54).
+    const block = registrationBlock(user, match, now, paymentsEnabled() || !!match.paymentQrUrl);
     if (block)
       throw new AppError(block === "BLOCKED" ? "FORBIDDEN" : "CONFLICT", BLOCK_MESSAGE[block]);
     if ((await alreadyInMatch(tx, matchId, [me.id])).size) {

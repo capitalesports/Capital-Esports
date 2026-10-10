@@ -190,7 +190,17 @@ export async function redeemReferralCredit(actor: Actor | null, input: unknown, 
       ? await tx.payment.findUnique({ where: { id: reg.paymentId } })
       : null;
     if (payment?.status === "PAID") throw new AppError("CONFLICT", "This entry is already paid.");
-    if (!payment || payment.expiresAt <= now)
+    // Paid by UPI QR (M54): a free slot replaces the QR payment while no proof is waiting for review.
+    const manual = await tx.manualPayment.findUnique({ where: { registrationId: reg.id } });
+    if (manual) {
+      if (manual.status === "SUBMITTED")
+        throw new AppError("CONFLICT", "Your payment proof is waiting for approval.");
+      if (manual.expiresAt <= now)
+        throw new AppError(
+          "CONFLICT",
+          "The payment window has expired. Register again if slots are left.",
+        );
+    } else if (!payment || payment.expiresAt <= now)
       throw new AppError(
         "CONFLICT",
         "The payment window has expired. Register again if slots are left.",
@@ -206,7 +216,8 @@ export async function redeemReferralCredit(actor: Actor | null, input: unknown, 
     }
     const rewards = await referralRewardsFor(tx, me.id);
     if (rewards.available < 1) throw new AppError("CONFLICT", "You have no free slots yet.");
-    await tx.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
+    if (payment) await tx.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
+    if (manual) await tx.manualPayment.delete({ where: { id: manual.id } });
     await tx.registration.update({ where: { id: reg.id }, data: { status: "CONFIRMED" } });
     await tx.referralCreditUse.create({
       data: {

@@ -12,6 +12,7 @@ import {
 } from "@/server/services/registration";
 import { submitResult } from "@/server/services/results";
 import { confirmRazorpayPayment, startCheckout } from "@/server/services/payments";
+import { submitManualPayment } from "@/server/services/manual-payments";
 import { redeemReferralCredit } from "@/server/services/referrals";
 
 function refresh(matchId: string) {
@@ -106,4 +107,27 @@ export async function leaveRosterAction(input: { matchId: string }) {
     await leaveRoster(await requireUser(), input);
     refresh(input.matchId);
   }, "You left the roster.");
+}
+
+/** Manual UPI payment proof: app, transaction ID and screenshot (DECISIONS M54). */
+export async function submitManualPaymentAction(form: FormData) {
+  return runAction(async () => {
+    const actor = await requireUser();
+    const matchId = String(form.get("matchId") ?? "");
+    const file = form.get("screenshot");
+    if (file !== null && !(file instanceof File))
+      throw new AppError("VALIDATION", "Invalid screenshot.");
+    const bytes = file && file.size ? new Uint8Array(await file.arrayBuffer()) : null;
+    await submitManualPayment(
+      actor,
+      {
+        matchId,
+        app: String(form.get("app") ?? ""),
+        transactionId: String(form.get("transactionId") ?? ""),
+      },
+      bytes,
+    );
+    refresh(matchId);
+    revalidatePath("/tournament", "layout");
+  }, "Payment submitted. You'll be confirmed once an admin checks it.");
 }

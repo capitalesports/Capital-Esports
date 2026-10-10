@@ -16,8 +16,34 @@ import { referralRewardsFor } from "@/server/services/referrals";
 import { FREE_SLOT_MAX_FEE_PAISE } from "@/lib/referral";
 import { getMyTeamsForGame, getViewerEntry, waitlistRank, type PublicMatch } from "./matches";
 
-async function pendingPayment(registrationId: string, status: string, userId: string) {
+async function pendingPayment(
+  registrationId: string,
+  status: string,
+  userId: string,
+  qrUrl: string | null,
+) {
   if (status !== "PENDING_PAYMENT") return null;
+  // Paid by the admin's UPI QR (M54): proof upload and its review status.
+  const manual = await db.manualPayment.findUnique({
+    where: { registrationId },
+    select: { amountPaise: true, expiresAt: true, status: true, rejectReason: true },
+  });
+  if (manual) {
+    const { available } =
+      manual.amountPaise <= FREE_SLOT_MAX_FEE_PAISE && manual.status !== "SUBMITTED"
+        ? await referralRewardsFor(db, userId)
+        : { available: 0 };
+    return {
+      amountPaise: manual.amountPaise,
+      expiresAt: manual.expiresAt.toISOString(),
+      freeSlots: available,
+      manual: {
+        qrUrl,
+        status: manual.status,
+        rejectReason: manual.rejectReason,
+      },
+    };
+  }
   const p = await db.payment.findUnique({
     where: { registrationId },
     select: { amountPaise: true, expiresAt: true },
@@ -66,7 +92,12 @@ export async function buildPanelState(
         igl: m.userId === registration.userId,
         status: m.status,
       })),
-      payment: await pendingPayment(registration.id, registration.status, user.id),
+      payment: await pendingPayment(
+        registration.id,
+        registration.status,
+        user.id,
+        match.paymentQrUrl,
+      ),
     };
   }
   if (rosterSpot && rosterSpot.registration.status !== "CANCELLED") {
@@ -97,7 +128,7 @@ export async function buildPanelState(
     };
   // Whether registration is possible at all comes first; the player's own game ID (missing or
   // incomplete) is filled in inside the registration pop-up (DECISIONS M14).
-  const block = registrationBlock(user, match, now, paymentsEnabled());
+  const block = registrationBlock(user, match, now, paymentsEnabled() || !!match.paymentQrUrl);
   if (block) return { kind: "UNAVAILABLE", message: BLOCK_MESSAGE[block] };
 
   const profile = gameProfileFor(user, match.game);

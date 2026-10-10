@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { DS } from "@/lib/design-tokens";
 import { formatINR } from "@/lib/money";
 
-export type CheckoutMode = "sandbox" | "production" | "razorpay" | "stub";
+/** "manual": paid by the admin's UPI QR with proof upload (M54), no online checkout. */
+export type CheckoutMode = "sandbox" | "production" | "razorpay" | "stub" | "manual";
 
 const RAZORPAY_CHECKOUT_JS = "https://checkout.razorpay.com/v1/checkout.js";
 
@@ -50,6 +51,11 @@ export async function openCheckout(
   mode: CheckoutMode,
   router: ReturnType<typeof useRouter>,
 ) {
+  // Paid by UPI QR (M54): nothing to open; the match page shows the QR and the proof form.
+  if (mode === "manual") {
+    router.refresh();
+    return;
+  }
   const r = await startCheckoutAction({ matchId });
   if (!r.ok) {
     toast.error(r.error);

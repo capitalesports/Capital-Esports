@@ -242,7 +242,7 @@ export default async function GameTournamentPage({
                 matchId={entry.id}
                 state={panel}
                 profileHref={`/profile?returnTo=${encodeURIComponent(path)}`}
-                checkoutMode={checkoutMode()}
+                checkoutMode={entry.paymentQrUrl ? "manual" : checkoutMode()}
                 entryFeePaise={entry.entryFeePaise}
               />
             ) : (

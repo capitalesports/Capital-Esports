@@ -25,6 +25,13 @@ const SAMPLE: Record<NotificationEvent["type"], NotificationEvent> = {
   TOURNAMENT_LOBBY: { type: "TOURNAMENT_LOBBY", userIds: ["u"], matchId: "m2", lobby: 2 },
   TOURNAMENT_UNPLACED: { type: "TOURNAMENT_UNPLACED", userIds: ["u"], matchId: "m1" },
   BRACKET_READY: { type: "BRACKET_READY", userIds: ["u"], matchId: "m3" },
+  PAYMENT_REJECTED: {
+    type: "PAYMENT_REJECTED",
+    userIds: ["u"],
+    matchId: "m1",
+    reason: "Amount not received",
+    released: false,
+  },
   PRIZE_WON: { type: "PRIZE_WON", userIds: ["u"], amountPaise: 45_400, place: 1, eventTitle: "Solo Rush" },
 };
 

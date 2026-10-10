@@ -16,6 +16,7 @@ import {
   LobbyStandingsTable,
   TournamentSchedule,
 } from "@/components/tournament/tournament-views";
+import { PaymentQrBox } from "@/components/admin/payment-qr-box";
 import { requireStaffPage } from "@/server/auth/guards";
 import { db } from "@/server/db";
 import { paymentsEnabled } from "@/server/env";
@@ -90,6 +91,13 @@ export default async function AdminTournamentPage({
       ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-4">
+          {entry && !cancelled ? (
+            <PaymentQrBox
+              tournamentId={t.id}
+              entryFeePaise={entry.entryFeePaise}
+              qrUrl={entry.paymentQrUrl}
+            />
+          ) : null}
           <EditTournamentForm
             t={{
               id: t.id,

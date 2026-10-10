@@ -695,3 +695,20 @@ Before the public launch, the owner asked for a full bug and security check and 
 - Moderators can set scrim prizes (payouts still need an admin).
 
 **Reset:** `scripts/launch-reset.mjs` (dry run by default; `--confirm=<db host>` to apply) deletes every player account and all player and test data in one transaction. It keeps staff accounts and site settings (content, sponsors, social links, seasons, points tables) and writes one `launch.reset` audit entry.
+
+### M54 Manual UPI payments (QR, proof upload, admin approval)
+Razorpay won't onboard us, so paid entries are collected by the owner's own UPI QR.
+- **Setting it up:** on an admin match page (scrims) or tournament page, with an entry fee set, "Collect the ₹X entry fee with my UPI QR" switches it on. The admin uploads a fixed-amount QR (PNG/JPEG/WebP, up to 2 MB), stored as `Match.paymentQrUrl` (a tournament's sign-up list holds it). Admin only. A paid match with a QR takes registrations even while online payments (`PAYMENTS_ENABLED`) are off.
+- **Player:**
+  - Registering holds the slot (PENDING_PAYMENT) and shows the QR, the exact amount and a 30-minute timer.
+  - The player picks the app they paid with (Google Pay, PhonePe, Paytm, BHIM UPI, Amazon Pay, CRED or another UPI app), enters the transaction ID/UTR (6–35 letters/digits; one ID pays for one entry), and uploads a screenshot (≤5 MB, magic bytes checked).
+  - The dashboard and match page then show "Payment pending approval".
+  - No "Slot confirmed" message or email goes out before approval.
+- **Admin → Payment approvals:** each payment shows the event, player, app, transaction ID, submit time, registration close time and the screenshot.
+  - **Approve** records a PAID `Payment` (`orderId manual_<id>`), so refunds, reports and referral rewards treat it like any payment. It confirms the slot and sends "Slot confirmed" (bell, push, email).
+  - **Reject** needs a reason the player sees. Either the player gets 30 more minutes to upload the right proof, or ("free the slot") the entry is cancelled.
+  - A tournament sign-up can't be approved after registration closes, because the draw is already done.
+- **Expiry:** an entry with no (accepted) proof in time is cancelled and the waitlist moves up; proof waiting for review never expires (`expireManualPayments`, run with the status catch-up).
+- **Refunds:** refunds of QR payments are never sent to a gateway. They stay in the refunds list until an admin marks them refunded.
+- **Referral free slots** can replace a QR payment while no proof is waiting for review.
+- Everything is audited (`manualPayment.submit/approve/reject`, `match.paymentQr.set/remove`).

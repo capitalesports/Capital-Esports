@@ -16,6 +16,7 @@ import type { Game } from "@/lib/games";
 import { isTeamMode, type MatchMode } from "@/lib/match-modes";
 import { PHONE_ITEM, PROFILE_ITEMS } from "@/lib/profile";
 import { openCheckout, PayButton, type CheckoutMode } from "./pay-button";
+import { ManualPaymentPanel } from "./manual-payment-panel";
 import { UseFreeSlotButton } from "./use-free-slot-button";
 
 // Only players adding or fixing a game ID need this form: keep it out of the match page's first load.
@@ -44,7 +45,17 @@ export type RegistrationPanelState =
       canCancel: boolean;
       teamName: string | null;
       roster: { name: string; igl: boolean; status: string }[];
-      payment: { amountPaise: number; expiresAt: string; freeSlots: number } | null;
+      payment: {
+        amountPaise: number;
+        expiresAt: string;
+        freeSlots: number;
+        /** Paid by UPI QR with proof reviewed by an admin (M54). */
+        manual?: {
+          qrUrl: string | null;
+          status: "AWAITING_PROOF" | "SUBMITTED" | "APPROVED" | "REJECTED" | "EXPIRED";
+          rejectReason: string | null;
+        };
+      } | null;
     }
   | { kind: "ROSTER_INVITE"; captainName: string; teamName: string }
   | { kind: "ON_ROSTER"; captainName: string; teamName: string; registrationStatus: string }
@@ -91,9 +102,11 @@ function useRegisterFlow(matchId: string, profileHref: string, checkoutMode: Che
     players?: { gameId: string; ign?: string }[];
   }) {
     const r = await register.run({ matchId, ...input });
-    // Paid entry: the slot is held; go straight to checkout.
-    if (r.ok && r.data.status === "PENDING_PAYMENT")
-      await openCheckout(matchId, checkoutMode, router);
+    // Paid entry: the slot is held; go straight to checkout (or show the UPI QR to pay).
+    if (r.ok && r.data.status === "PENDING_PAYMENT") {
+      if (checkoutMode === "manual") router.refresh();
+      else await openCheckout(matchId, checkoutMode, router);
+    }
     if (!r.ok && "code" in r && r.code === "PROFILE_INCOMPLETE") {
       const missing = r.fieldErrors?.missing ?? [];
       // A missing game ID is asked for right here; name, date of birth, email and the mobile
@@ -287,7 +300,21 @@ export function RegistrationPanel({
             {STATUS_TEXT[state.status]}
             {state.status === "WAITLISTED" && state.waitlistRank ? ` (#${state.waitlistRank})` : ""}
           </p>
-          {state.status === "PENDING_PAYMENT" && state.payment ? (
+          {state.status === "PENDING_PAYMENT" && state.payment?.manual ? (
+            <>
+              <ManualPaymentPanel
+                matchId={matchId}
+                amountPaise={state.payment.amountPaise}
+                expiresAt={state.payment.expiresAt}
+                qrUrl={state.payment.manual.qrUrl}
+                status={state.payment.manual.status}
+                rejectReason={state.payment.manual.rejectReason}
+              />
+              {state.payment.freeSlots > 0 ? (
+                <UseFreeSlotButton matchId={matchId} available={state.payment.freeSlots} />
+              ) : null}
+            </>
+          ) : state.status === "PENDING_PAYMENT" && state.payment ? (
             <>
               <PayButton
                 matchId={matchId}

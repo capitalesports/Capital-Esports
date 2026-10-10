@@ -26,6 +26,7 @@ import { PHONE_FOR_MONEY_MESSAGE, PHONE_ITEM } from "@/lib/profile";
 import { assertUser, type Actor } from "@/lib/roles";
 import { addMinutes } from "@/lib/time";
 import { notify, type NotificationEvent } from "./notify";
+import { holdForManualPayment } from "./manual-payments";
 
 const newOrderId = () => `ord_${randomUUID().replace(/-/g, "")}`;
 
@@ -36,9 +37,11 @@ const newOrderId = () => `ord_${randomUUID().replace(/-/g, "")}`;
 export async function enterPendingPayment(
   tx: Tx,
   reg: { id: string; userId: string },
-  match: { id: string; entryFeePaise: number },
+  match: { id: string; entryFeePaise: number; paymentQrUrl?: string | null },
   now = new Date(),
 ) {
+  // Paid by the admin's UPI QR and approved by hand (DECISIONS M54).
+  if (match.paymentQrUrl) return holdForManualPayment(tx, reg, match, now);
   const earlier = await tx.payment.findUnique({ where: { registrationId: reg.id } });
   if (earlier?.status === "PAID") {
     // Already paid (e.g. a paid side left waiting for an opponent, then placed): no second charge.
@@ -267,11 +270,12 @@ export async function executeRefunds(
     refundReason: string | null;
   }[],
 ) {
-  const gateway = getPaymentGateway();
   for (const p of payments) {
     if (!p.refundId) continue;
+    // Manual UPI payments (M54) are refunded by hand: they stay in Admin → Refunds until marked.
+    if (p.orderId.startsWith("manual_")) continue;
     try {
-      const { status } = await gateway.refund({
+      const { status } = await getPaymentGateway().refund({
         orderId: p.orderId,
         sessionId: p.sessionId,
         providerPaymentId: p.cfPaymentId,

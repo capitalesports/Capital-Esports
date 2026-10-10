@@ -302,7 +302,7 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
               matchId={match.id}
               state={panel}
               profileHref={`/profile?returnTo=${encodeURIComponent(path)}`}
-              checkoutMode={checkoutMode()}
+              checkoutMode={match.paymentQrUrl ? "manual" : checkoutMode()}
               entryFeePaise={match.entryFeePaise}
             />
           </section>

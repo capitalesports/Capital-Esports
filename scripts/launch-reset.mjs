@@ -31,6 +31,7 @@ if (apply && confirm !== host) {
 
 /** Emptied completely (order doesn't matter: one TRUNCATE ... CASCADE). */
 const WIPE = [
+  "ManualPayment",
   "ReferralCreditUse",
   "AccountDeletionRequest",
   "AnalyticsEvent",

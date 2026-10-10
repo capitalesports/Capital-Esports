@@ -27,6 +27,14 @@ export type NotificationEvent =
   | { type: "TOURNAMENT_UNPLACED"; userIds: string[]; matchId: string }
   /** Tournament registration closed and the bracket is drawn (the player's first match). */
   | { type: "BRACKET_READY"; userIds: string[]; matchId: string }
+  /** Manual UPI payment not accepted (DECISIONS M54). */
+  | {
+      type: "PAYMENT_REJECTED";
+      userIds: string[];
+      matchId: string;
+      reason: string;
+      released: boolean;
+    }
   /** A player won a prize (scrim winner, tournament podium payee). DECISIONS M28. */
   | {
       type: "PRIZE_WON";
@@ -59,6 +67,7 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   "TOURNAMENT_LOBBY",
   "TOURNAMENT_UNPLACED",
   "BRACKET_READY",
+  "PAYMENT_REJECTED",
   "PRIZE_WON",
 ];
 
@@ -237,6 +246,15 @@ export function messageFor(
         body: "Registration has closed and the bracket is drawn. Check your games on the dashboard.",
         url: "/dashboard",
       };
+    case "PAYMENT_REJECTED":
+      return {
+        type: event.type,
+        title: "Payment not approved",
+        body: event.released
+          ? `Your payment for ${match} could not be approved: ${event.reason}. Your slot was released.`
+          : `Your payment for ${match} could not be approved: ${event.reason}. Upload the correct payment within 30 minutes to keep your slot.`,
+        url: matchUrl,
+      };
     case "PRIZE_WON":
       return {
         type: event.type,
@@ -266,6 +284,7 @@ export const PUSH_EVENTS: ReadonlySet<NotificationType> = new Set([
   "TOURNAMENT_LOBBY",
   "TOURNAMENT_UNPLACED",
   "BRACKET_READY",
+  "PAYMENT_REJECTED",
   "PRIZE_WON",
 ]);
 

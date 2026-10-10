@@ -36,7 +36,13 @@ export interface DroppedRegistration {
 export async function dropRegistration(
   tx: Tx,
   reg: { id: string; userId: string; status: RegistrationStatus; paymentId: string | null },
-  match: { id: string; status: MatchStatus; maxSlots: number; entryFeePaise: number },
+  match: {
+    id: string;
+    status: MatchStatus;
+    maxSlots: number;
+    entryFeePaise: number;
+    paymentQrUrl: string | null;
+  },
   refundReason: string,
 ): Promise<DroppedRegistration> {
   const roster = await tx.registrationMember.findMany({

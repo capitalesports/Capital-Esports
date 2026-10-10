@@ -40,6 +40,13 @@ const ENTRY_LABEL: Record<string, string> = {
   NO_SHOW: "No-show",
 };
 
+/** Manual UPI payments (M54): where a paid entry stands until an admin approves it. */
+const MANUAL_PAYMENT_LABEL: Record<string, string> = {
+  AWAITING_PROOF: "Pay by QR and upload proof",
+  SUBMITTED: "Payment pending approval",
+  REJECTED: "Payment rejected: open the match to fix it",
+};
+
 const PAYOUT_LABEL: Record<string, string> = {
   PENDING: "Waiting",
   PROCESSING: "Processing",
@@ -200,7 +207,21 @@ export default async function DashboardPage() {
                         {lobbyWord(e.match.mode)} {e.match.lobbyNumber}
                       </span>
                     ) : null}
-                    <span className="text-muted-foreground text-xs">{ENTRY_LABEL[e.status]}</span>
+                    {e.status === "PENDING_PAYMENT" && e.manualPayment ? (
+                      <span
+                        className={
+                          e.manualPayment.status === "SUBMITTED"
+                            ? "text-gold text-xs font-semibold"
+                            : e.manualPayment.status === "REJECTED"
+                              ? "text-destructive text-xs font-semibold"
+                              : "text-muted-foreground text-xs"
+                        }
+                      >
+                        {MANUAL_PAYMENT_LABEL[e.manualPayment.status] ?? ENTRY_LABEL[e.status]}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">{ENTRY_LABEL[e.status]}</span>
+                    )}
                   </div>
                   <h3 className="font-semibold">
                     <Link

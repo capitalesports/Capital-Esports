@@ -30,6 +30,9 @@ export async function catchUpMatchStatuses(now = Date.now()): Promise<void> {
       await runReminderJob(new Date(now));
       // Unpaid entries lose their slot after the 10-minute window (the daily cron alone is too slow).
       await runPaymentExpiryJob(new Date(now));
+      // Manual UPI payments (M54): slots whose proof never came in time are released.
+      const { expireManualPayments } = await import("@/server/services/manual-payments");
+      await expireManualPayments(new Date(now));
     } catch (e) {
       console.error("[status catch-up] failed", e);
     } finally {

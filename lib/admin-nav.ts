@@ -20,6 +20,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { href: "/admin/deletion-requests", label: "Deletion requests", roles: ADMIN_ONLY },
   { href: "/admin/seasons", label: "Seasons", roles: ADMIN_ONLY },
   { href: "/admin/points", label: "Points", roles: ADMIN_ONLY },
+  { href: "/admin/payments", label: "Payment approvals", roles: ADMIN_ONLY },
   { href: "/admin/payouts", label: "Prizes", roles: ADMIN_ONLY },
   { href: "/admin/content", label: "Content", roles: ADMIN_ONLY },
   { href: "/admin/announcements", label: "Announcements", roles: ADMIN_ONLY },

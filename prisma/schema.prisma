@@ -132,32 +132,34 @@ model User {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  gameProfiles       GameProfile[]
-  captainOf          Team[]                   @relation("TeamCaptain")
-  teamMemberships    TeamMember[]
-  registrations      Registration[]
-  rosterEntries      RegistrationMember[]
-  pointsEntries      PointsEntry[]
-  createdMatches     Match[]                  @relation("MatchCreatedBy")
-  submittedResults   Result[]                 @relation("ResultSubmittedBy")
-  approvedResults    Result[]                 @relation("ResultApprovedBy")
-  bansCreated        Ban[]                    @relation("BanCreatedBy")
-  auditLogs          AuditLog[]
-  payments           Payment[]
-  payouts            Payout[]
-  payoutMethod       PayoutMethod?
-  notifications      Notification[]
-  pushSubscriptions  PushSubscription[]
-  emailCodes         EmailCode[]
-  leaderboardRows    LeaderboardSnapshot[]
-  seasonResults      SeasonResult[]
-  reportsFiled       Report[]                 @relation("ReportReporter")
-  reportsAgainst     Report[]                 @relation("ReportTarget")
-  deletionRequests   AccountDeletionRequest[] @relation("DeletionRequester")
-  deletionDecisions  AccountDeletionRequest[] @relation("DeletionDecider")
-  referredBy         User?                    @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
-  referrals          User[]                   @relation("Referrals")
-  referralCreditUses ReferralCreditUse[]
+  gameProfiles         GameProfile[]
+  captainOf            Team[]                   @relation("TeamCaptain")
+  teamMemberships      TeamMember[]
+  registrations        Registration[]
+  rosterEntries        RegistrationMember[]
+  pointsEntries        PointsEntry[]
+  createdMatches       Match[]                  @relation("MatchCreatedBy")
+  submittedResults     Result[]                 @relation("ResultSubmittedBy")
+  approvedResults      Result[]                 @relation("ResultApprovedBy")
+  bansCreated          Ban[]                    @relation("BanCreatedBy")
+  auditLogs            AuditLog[]
+  payments             Payment[]
+  payouts              Payout[]
+  payoutMethod         PayoutMethod?
+  notifications        Notification[]
+  pushSubscriptions    PushSubscription[]
+  emailCodes           EmailCode[]
+  leaderboardRows      LeaderboardSnapshot[]
+  seasonResults        SeasonResult[]
+  reportsFiled         Report[]                 @relation("ReportReporter")
+  reportsAgainst       Report[]                 @relation("ReportTarget")
+  deletionRequests     AccountDeletionRequest[] @relation("DeletionRequester")
+  deletionDecisions    AccountDeletionRequest[] @relation("DeletionDecider")
+  referredBy           User?                    @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals            User[]                   @relation("Referrals")
+  referralCreditUses   ReferralCreditUse[]
+  manualPayments       ManualPayment[]          @relation("ManualPaymentPayer")
+  manualPaymentReviews ManualPayment[]          @relation("ManualPaymentReviewer")
 
   @@index([displayName])
   @@index([referredById])
@@ -262,6 +264,8 @@ model Match {
   minSlots             Int         @default(2)
   entryFeePaise        Int         @default(0)
   prizePaise           Int         @default(0)
+  /// Manual UPI payments (DECISIONS M54): the admin's fixed-amount UPI QR for this entry fee.
+  paymentQrUrl         String?
   status               MatchStatus @default(UPCOMING)
   roomId               String?
   roomPassword         String?
@@ -286,17 +290,18 @@ model Match {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  tournament    Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
-  entryFor      Tournament?          @relation("TournamentEntryList")
-  parent        Match?               @relation("MatchLobbies", fields: [parentMatchId], references: [id], onDelete: SetNull)
-  lobbies       Match[]              @relation("MatchLobbies")
-  createdBy     User                 @relation("MatchCreatedBy", fields: [createdById], references: [id])
-  registrations Registration[]
-  rosterEntries RegistrationMember[]
-  results       Result[]
-  pointsEntries PointsEntry[]
-  payments      Payment[]
-  reports       Report[]
+  tournament     Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  entryFor       Tournament?          @relation("TournamentEntryList")
+  parent         Match?               @relation("MatchLobbies", fields: [parentMatchId], references: [id], onDelete: SetNull)
+  lobbies        Match[]              @relation("MatchLobbies")
+  createdBy      User                 @relation("MatchCreatedBy", fields: [createdById], references: [id])
+  registrations  Registration[]
+  rosterEntries  RegistrationMember[]
+  results        Result[]
+  pointsEntries  PointsEntry[]
+  payments       Payment[]
+  manualPayments ManualPayment[]
+  reports        Report[]
 
   @@index([startsAt, status])
   @@index([game, startsAt])
@@ -326,6 +331,7 @@ model Registration {
   members           RegistrationMember[]
   results           Result[]
   referralCreditUse ReferralCreditUse?
+  manualPayment     ManualPayment?
 
   @@unique([matchId, userId])
   @@index([matchId, status])
@@ -846,5 +852,60 @@ model ReferralCreditUse {
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+}
+
+enum ManualPaymentStatus {
+  /// Slot held; the player still has to pay the QR and upload proof.
+  AWAITING_PROOF
+  /// Proof uploaded; waiting for an admin.
+  SUBMITTED
+  APPROVED
+  /// Not accepted; the player may submit again before the deadline.
+  REJECTED
+  /// No (accepted) proof in time: the slot was released.
+  EXPIRED
+}
+
+enum UpiApp {
+  GOOGLE_PAY
+  PHONEPE
+  PAYTM
+  BHIM
+  AMAZON_PAY
+  CRED
+  OTHER
+}
+
+/// A paid entry paid by scanning the admin's UPI QR (DECISIONS M54). The player uploads the
+/// transaction ID and a screenshot; an admin approves it, which records a PAID Payment and confirms
+/// the slot (only then does the "Slot confirmed" email go out).
+model ManualPayment {
+  id             String              @id @default(cuid())
+  registrationId String              @unique
+  matchId        String
+  userId         String
+  amountPaise    Int
+  status         ManualPaymentStatus @default(AWAITING_PROOF)
+  app            UpiApp?
+  /// UPI reference / UTR or the app's transaction ID (upper-cased).
+  transactionId  String?
+  screenshotUrl  String?
+  submittedAt    DateTime?
+  /// Deadline to upload proof (slot released after it, unless proof is waiting for review).
+  expiresAt      DateTime
+  reviewedById   String?
+  reviewedAt     DateTime?
+  rejectReason   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  match        Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user         User         @relation("ManualPaymentPayer", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy   User?        @relation("ManualPaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, submittedAt])
+  @@index([transactionId])
   @@index([userId])
 }

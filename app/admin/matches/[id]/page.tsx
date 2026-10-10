@@ -21,14 +21,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PaymentQrBox } from "@/components/admin/payment-qr-box";
 import { requireStaffPage } from "@/server/auth/guards";
 import { toActor } from "@/server/auth/session";
 import { getMatchForAdmin } from "@/server/queries/admin-matches";
 import { getLobbyGroup } from "@/server/queries/matches";
-import {
-  ACTIVE_REGISTRATION,
-  listMatchRegistrations,
-} from "@/server/services/admin-registrations";
+import { ACTIVE_REGISTRATION, listMatchRegistrations } from "@/server/services/admin-registrations";
 import { GAME_CONFIG } from "@/lib/games";
 import { lobbyNoun, lobbyWord } from "@/lib/lobbies";
 import { MODE_LABEL } from "@/lib/match-modes";
@@ -49,13 +47,13 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
     getLobbyGroup(match, null),
   ]);
   const word = lobbyWord(match.mode);
-  const unplaced = group && match.parentMatchId === null
-    ? match.registrations.filter((r) => r.status === "WAITLISTED").length
-    : 0;
+  const unplaced =
+    group && match.parentMatchId === null
+      ? match.registrations.filter((r) => r.status === "WAITLISTED").length
+      : 0;
   const confirmed = match.registrations.filter((r) => r.status === "CONFIRMED").length;
   const editable = isEditable(match.status);
-  const canPromote =
-    match.status === "REGISTRATION_OPEN" || match.status === "REGISTRATION_CLOSED";
+  const canPromote = match.status === "REGISTRATION_OPEN" || match.status === "REGISTRATION_CLOSED";
   const lower = (s: string) => s.replace(/_/g, " ").toLowerCase();
 
   const facts: [string, React.ReactNode][] = [
@@ -119,14 +117,31 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
         <p className="bg-muted mb-4 rounded-lg p-3 text-sm">Cancelled: {match.cancelReason}</p>
       ) : null}
 
+      {user.role === "ADMIN" &&
+      !match.isEntryList &&
+      !match.parentMatchId &&
+      match.bracketRound === null &&
+      !match.tournamentId ? (
+        <div className="mb-4">
+          <PaymentQrBox
+            matchId={match.id}
+            entryFeePaise={match.entryFeePaise}
+            qrUrl={match.paymentQrUrl}
+          />
+        </div>
+      ) : null}
+
       {group ? (
-        <section aria-label={`Split ${lobbyNoun(match.mode, 2)}`} className="card-ds mb-4 space-y-3 p-4">
+        <section
+          aria-label={`Split ${lobbyNoun(match.mode, 2)}`}
+          className="card-ds mb-4 space-y-3 p-4"
+        >
           <h2 className="font-semibold">
             Split into {group.lobbies.length} {lobbyNoun(match.mode, group.lobbies.length)}
           </h2>
           <p className="text-muted-foreground text-sm">
-            Each {word.toLowerCase()} is its own match: set its room ID and password, and approve its
-            results separately. Prizes are per {word.toLowerCase()}.
+            Each {word.toLowerCase()} is its own match: set its room ID and password, and approve
+            its results separately. Prizes are per {word.toLowerCase()}.
           </p>
           <ul className="flex flex-wrap gap-2">
             {group.lobbies.map((l) => (
@@ -143,11 +158,14 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
             ))}
           </ul>
           {unplaced ? (
-            <p className="border-warning/40 bg-warning/10 rounded-lg border p-3 text-sm" role="status">
+            <p
+              className="border-warning/40 bg-warning/10 rounded-lg border p-3 text-sm"
+              role="status"
+            >
               {unplaced} unmatched {unplaced === 1 ? "entry has" : "entries have"} no opponent (odd
               number of entries). Remove {unplaced === 1 ? "it" : "them"} below to refund now, or
-              promote one if a {word.toLowerCase()} loses a side. Anything still unmatched is refunded
-              automatically when this {word.toLowerCase()} goes live.
+              promote one if a {word.toLowerCase()} loses a side. Anything still unmatched is
+              refunded automatically when this {word.toLowerCase()} goes live.
             </p>
           ) : null}
         </section>
@@ -223,9 +241,7 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
                     <ul className="space-y-1 text-xs">
                       {r.roster.map((p, i) => (
                         <li key={`${p.userId ?? p.gameId ?? "p"}-${i}`}>
-                          {p.igl ? (
-                            <span className="text-gold mr-1 font-semibold">IGL</span>
-                          ) : null}
+                          {p.igl ? <span className="text-gold mr-1 font-semibold">IGL</span> : null}
                           {playerIdLabel(match.game, p.gameId, p.ign)}
                           {/* The account name, when it isn't the in-game name already shown. */}
                           {p.name !== p.ign ? (
@@ -251,9 +267,7 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
                       registrationId={r.id}
                       name={r.name}
                       canRemove={editable && ACTIVE_REGISTRATION.includes(r.status)}
-                      canPromote={
-                        canPromote && regs.freeSlots > 0 && r.status === "WAITLISTED"
-                      }
+                      canPromote={canPromote && regs.freeSlots > 0 && r.status === "WAITLISTED"}
                     />
                   </TableCell>
                 </TableRow>
