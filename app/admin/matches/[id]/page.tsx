@@ -79,7 +79,12 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
       ),
     ],
     ["Tournament", match.tournament?.title ?? "—"],
-    ["Room credentials", match.roomId ? "Set" : "Not set"],
+    [
+      "Room credentials",
+      match.roomId
+        ? `Sent: ${match.roomId}${match.roomPassword ? ` / ${match.roomPassword}` : ""}`
+        : "Not set",
+    ],
   ];
 
   return (
@@ -186,7 +191,7 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
             matchId={match.id}
             game={match.game}
             status={match.status}
-            hasCredentials={!!match.roomId}
+            current={{ roomId: match.roomId, roomPassword: match.roomPassword }}
           />
           {isCloneable(match) ? <CloneControls matchId={match.id} /> : null}
           <CancelControls matchId={match.id} status={match.status} />

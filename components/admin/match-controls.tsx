@@ -61,15 +61,18 @@ export function RoomCredentialsForm({
   matchId,
   game,
   status,
-  hasCredentials,
+  current,
 }: {
   matchId: string;
   game: Game;
   status: MatchStatus;
-  hasCredentials: boolean;
+  /** What the players see now (staff page only). */
+  current: { roomId: string | null; roomPassword: string | null };
 }) {
-  const [roomId, setRoomId] = useState("");
-  const [roomPassword, setRoomPassword] = useState("");
+  const router = useRouter();
+  const hasCredentials = !!current.roomId;
+  const [roomId, setRoomId] = useState(current.roomId ?? "");
+  const [roomPassword, setRoomPassword] = useState(current.roomPassword ?? "");
   const { run, pending, fieldErrors } = useAction(setRoomCredentialsAction);
   // Valorant: one room code, no password (DECISIONS M22).
   const withPassword = roomNeedsPassword(game);
@@ -78,9 +81,19 @@ export function RoomCredentialsForm({
   return (
     <Section title={withPassword ? "Room credentials" : "Room code"}>
       <p className="text-muted-foreground text-sm">
-        {hasCredentials ? "Already set. Saving replaces it." : "Not set yet."} Confirmed players
-        see it as soon as you save (on their dashboard and the match page) and get a notification.
-        Nobody else can see it.
+        {hasCredentials ? (
+          <>
+            <span className="text-success font-semibold">
+              Sent: {current.roomId}
+              {current.roomPassword ? ` / ${current.roomPassword}` : ""}
+            </span>
+            . Saving a new one replaces it.
+          </>
+        ) : (
+          "Not set yet."
+        )}{" "}
+        Confirmed players see it as soon as you save (on their dashboard and the match page) and get
+        a notification. Nobody else can see it.
       </p>
       <form
         className="grid gap-3 sm:grid-cols-2"
@@ -89,10 +102,7 @@ export function RoomCredentialsForm({
           const r = await run(
             withPassword ? { matchId, roomId, roomPassword } : { matchId, roomId },
           );
-          if (r.ok) {
-            setRoomId("");
-            setRoomPassword("");
-          }
+          if (r.ok) router.refresh();
         }}
       >
         <FormField id="room-id" label={codeLabel} errors={fieldErrors.roomId}>

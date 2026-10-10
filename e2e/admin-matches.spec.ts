@@ -12,7 +12,9 @@ async function loginAsAdmin(page: Page) {
 
 const TITLE = `E2E Squad Scrim ${Date.now()}`;
 
-test("admin creates a scrim, clones it for 3 days, opens registration, sets room credentials and cancels one", async ({ page }) => {
+test("admin creates a scrim, clones it for 3 days, opens registration, sets room credentials and cancels one", async ({
+  page,
+}) => {
   await loginAsAdmin(page);
   await page.goto("/admin/matches/new");
 
@@ -42,14 +44,17 @@ test("admin creates a scrim, clones it for 3 days, opens registration, sets room
   await page.getByLabel("Room password").fill("ffsquad");
   await page.getByRole("button", { name: "Save room credentials" }).click();
   await expect(page.getByText("Room credentials saved")).toBeVisible();
-  await expect(page.getByText("Already set.")).toBeVisible();
+  await expect(page.getByText("Sent: 4455667 / ffsquad", { exact: true }).first()).toBeVisible();
 
   // The list shows the original plus 3 clones.
   await page.goto("/admin/matches");
   await expect(page.getByRole("link", { name: TITLE })).toHaveCount(4);
 
   // Cancel one of the clones.
-  const clone = await e2eDb().match.findFirstOrThrow({ where: { title: TITLE, status: "UPCOMING" }, orderBy: { startsAt: "desc" } });
+  const clone = await e2eDb().match.findFirstOrThrow({
+    where: { title: TITLE, status: "UPCOMING" },
+    orderBy: { startsAt: "desc" },
+  });
   await page.goto(`/admin/matches/${clone.id}`);
   await page.getByLabel("Reason").fill("Not enough squads");
   await page.getByRole("button", { name: "Cancel match" }).click();
@@ -59,10 +64,18 @@ test("admin creates a scrim, clones it for 3 days, opens registration, sets room
 
   // Everything is in the audit log.
   await page.goto("/admin/audit?action=match.");
-  for (const action of ["match.create", "match.clone", "match.status", "match.roomCredentials", "match.cancel"]) {
+  for (const action of [
+    "match.create",
+    "match.clone",
+    "match.status",
+    "match.roomCredentials",
+    "match.cancel",
+  ]) {
     await expect(page.getByRole("cell", { name: action, exact: true }).first()).toBeVisible();
   }
-  const actions = await e2eDb().auditLog.findMany({ where: { action: { startsWith: "match." }, actorId: { not: null } } });
+  const actions = await e2eDb().auditLog.findMany({
+    where: { action: { startsWith: "match." }, actorId: { not: null } },
+  });
   expect(actions.filter((a) => a.action === "match.clone")).toHaveLength(3);
   expect(page.url()).not.toBe(matchUrl);
 });
