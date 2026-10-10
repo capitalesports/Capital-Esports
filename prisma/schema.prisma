@@ -459,7 +459,7 @@ model Tournament {
   matches   Match[]
   entryList Match?  @relation("TournamentEntryList", fields: [entryMatchId], references: [id], onDelete: SetNull)
 
-  @@unique([game, mode, weekOf])
+  @@index([game, mode, weekOf])
 }
 
 // ---------------------------------------------------------------------------

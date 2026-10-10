@@ -15,7 +15,6 @@ import {
   isHeadToHead,
   MATCH_MODES,
   maxSlotsFor,
-  MODE_LABEL,
   MODES_FOR_GAME,
   playersPerSlot,
 } from "@/lib/match-schema";
@@ -147,67 +146,57 @@ export async function createTournament(actor: Actor | null, input: unknown) {
   const format = isHeadToHead(v.mode) ? "BRACKET" : "LOBBY_POINTS";
   // Sign-ups are uncapped (DECISIONS M50); maxSlots is one lobby (or one game) for display.
   const slots = maxSlotsFor(v.game, v.mode);
-  try {
-    return await db.$transaction(async (tx) => {
-      const t = await tx.tournament.create({
-        data: {
-          game: v.game,
-          title: v.title,
-          weekOf: mondayOfIstWeek(v.startsAt),
-          startsAt: v.startsAt,
-          prizePoolPaise: v.prizePool,
-          rulesMarkdown: v.rulesMarkdown,
-          format,
-          mode: v.mode,
-          bracketSize: null,
-          streamUrl: v.streamUrl,
-        },
-      });
-      const entry = await tx.match.create({
-        data: {
-          game: v.game,
-          kind: "TOURNAMENT",
-          mode: v.mode,
-          title: `${v.title} — sign-up`,
-          description: "Tournament sign-up list. Register here.",
-          startsAt: v.startsAt,
-          registrationOpensAt: v.registrationOpensAt ?? null,
-          registrationClosesAt: v.registrationClosesAt ?? addMinutes(v.startsAt, -CLOSE_OFFSET_MIN),
-          maxSlots: slots,
-          // The fee is paid when signing up (the lobby/bracket matches copy entries, never charge again).
-          entryFeePaise: v.entryFee,
-          // Opens later if a future opening time was set (the status job opens it then).
-          status:
-            v.registrationOpensAt && v.registrationOpensAt > new Date()
-              ? "UPCOMING"
-              : "REGISTRATION_OPEN",
-          isEntryList: true,
-          tournamentId: t.id,
-          createdById: me.id,
-        },
-      });
-      const saved = await tx.tournament.update({
-        where: { id: t.id },
-        data: { entryMatchId: entry.id },
-      });
-      await writeAudit(tx, {
-        actorId: me.id,
-        action: "tournament.create",
-        entityType: "Tournament",
-        entityId: t.id,
-        after: saved,
-      });
-      return saved;
+  return await db.$transaction(async (tx) => {
+    const t = await tx.tournament.create({
+      data: {
+        game: v.game,
+        title: v.title,
+        weekOf: mondayOfIstWeek(v.startsAt),
+        startsAt: v.startsAt,
+        prizePoolPaise: v.prizePool,
+        rulesMarkdown: v.rulesMarkdown,
+        format,
+        mode: v.mode,
+        bracketSize: null,
+        streamUrl: v.streamUrl,
+      },
     });
-  } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      throw new AppError(
-        "CONFLICT",
-        `There is already a ${GAME_CONFIG[v.game].name} ${MODE_LABEL[v.mode]} tournament that week.`,
-      );
-    }
-    throw e;
-  }
+    const entry = await tx.match.create({
+      data: {
+        game: v.game,
+        kind: "TOURNAMENT",
+        mode: v.mode,
+        title: `${v.title} — sign-up`,
+        description: "Tournament sign-up list. Register here.",
+        startsAt: v.startsAt,
+        registrationOpensAt: v.registrationOpensAt ?? null,
+        registrationClosesAt: v.registrationClosesAt ?? addMinutes(v.startsAt, -CLOSE_OFFSET_MIN),
+        maxSlots: slots,
+        // The fee is paid when signing up (the lobby/bracket matches copy entries, never charge again).
+        entryFeePaise: v.entryFee,
+        // Opens later if a future opening time was set (the status job opens it then).
+        status:
+          v.registrationOpensAt && v.registrationOpensAt > new Date()
+            ? "UPCOMING"
+            : "REGISTRATION_OPEN",
+        isEntryList: true,
+        tournamentId: t.id,
+        createdById: me.id,
+      },
+    });
+    const saved = await tx.tournament.update({
+      where: { id: t.id },
+      data: { entryMatchId: entry.id },
+    });
+    await writeAudit(tx, {
+      actorId: me.id,
+      action: "tournament.create",
+      entityType: "Tournament",
+      entityId: t.id,
+      after: saved,
+    });
+    return saved;
+  });
 }
 
 const blankToUndefined = (v: unknown) => (v === "" || v === null ? undefined : v);
@@ -348,66 +337,56 @@ async function entryFeeChange(tx: Tx, t: TournamentRow, fee: number | undefined)
 export async function updateTournament(actor: Actor | null, input: unknown) {
   const me = assertAdmin(actor);
   const v = parseInput(updateSchema, input);
-  try {
-    return await db.$transaction(async (tx) => {
-      const before = await loadTournament(tx, v.tournamentId);
-      const change = await structureChange(tx, before, v);
-      const entryFeePaise = await entryFeeChange(tx, before, v.entryFee);
-      const after = await tx.tournament.update({
-        where: { id: v.tournamentId },
+  return await db.$transaction(async (tx) => {
+    const before = await loadTournament(tx, v.tournamentId);
+    const change = await structureChange(tx, before, v);
+    const entryFeePaise = await entryFeeChange(tx, before, v.entryFee);
+    const after = await tx.tournament.update({
+      where: { id: v.tournamentId },
+      data: {
+        title: v.title,
+        prizePoolPaise: v.prizePool,
+        rulesMarkdown: v.rulesMarkdown,
+        streamUrl: v.streamUrl,
+        ...(change
+          ? {
+              startsAt: change.startsAt,
+              weekOf: mondayOfIstWeek(change.startsAt),
+              mode: change.mode,
+              format: change.format,
+              bracketSize: null,
+            }
+          : {}),
+      },
+    });
+    // Keep the sign-up list in sync with the tournament.
+    if (before.entryMatchId) {
+      await tx.match.update({
+        where: { id: before.entryMatchId },
         data: {
-          title: v.title,
-          prizePoolPaise: v.prizePool,
-          rulesMarkdown: v.rulesMarkdown,
-          streamUrl: v.streamUrl,
+          title: `${v.title} — sign-up`,
+          ...(entryFeePaise === null ? {} : { entryFeePaise }),
           ...(change
             ? {
                 startsAt: change.startsAt,
-                weekOf: mondayOfIstWeek(change.startsAt),
+                registrationClosesAt: addMinutes(change.startsAt, -CLOSE_OFFSET_MIN),
                 mode: change.mode,
-                format: change.format,
-                bracketSize: null,
+                maxSlots: change.slots,
               }
             : {}),
         },
       });
-      // Keep the sign-up list in sync with the tournament.
-      if (before.entryMatchId) {
-        await tx.match.update({
-          where: { id: before.entryMatchId },
-          data: {
-            title: `${v.title} — sign-up`,
-            ...(entryFeePaise === null ? {} : { entryFeePaise }),
-            ...(change
-              ? {
-                  startsAt: change.startsAt,
-                  registrationClosesAt: addMinutes(change.startsAt, -CLOSE_OFFSET_MIN),
-                  mode: change.mode,
-                  maxSlots: change.slots,
-                }
-              : {}),
-          },
-        });
-      }
-      await writeAudit(tx, {
-        actorId: me.id,
-        action: "tournament.update",
-        entityType: "Tournament",
-        entityId: v.tournamentId,
-        before,
-        after,
-      });
-      return after;
-    });
-  } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      throw new AppError(
-        "CONFLICT",
-        "There is already a tournament for this game and mode that week.",
-      );
     }
-    throw e;
-  }
+    await writeAudit(tx, {
+      actorId: me.id,
+      action: "tournament.update",
+      entityType: "Tournament",
+      entityId: v.tournamentId,
+      before,
+      after,
+    });
+    return after;
+  });
 }
 
 const cancelTournamentSchema = z.object({

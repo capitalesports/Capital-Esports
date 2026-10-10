@@ -58,7 +58,7 @@ export async function lobbyStandingsFor(
 const WEEK_MS = 7 * 24 * 60 * 60_000;
 
 /**
- * Current tournaments for a game (one per mode is allowed each week): this week's and next
+ * Current tournaments for a game (any number per mode and week): this week's and next
  * week's, cancelled ones excluded, soonest first. Falls back to the nearest later week.
  */
 export async function getCurrentTournaments(game: Game, now = new Date()) {

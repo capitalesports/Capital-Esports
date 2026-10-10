@@ -21,6 +21,18 @@ export function pickByMode<T extends { mode: MatchMode }>(
   return list.find((t) => t.mode === mode) ?? list[0];
 }
 
+/**
+ * Pick this week's tournament from the URL: `?t=<id>` (several can share a game and mode), else
+ * `?mode=` (older links), else the first one.
+ */
+export function pickTournament<T extends { id: string; mode: MatchMode }>(
+  list: T[],
+  query: { t?: string | string[]; mode?: string | string[] },
+): T | undefined {
+  const id = Array.isArray(query.t) ? query.t[0] : query.t;
+  return list.find((t) => t.id === id) ?? pickByMode(list, query.mode);
+}
+
 export const BRACKET_SIZES = [8, 16] as const;
 export type BracketSize = (typeof BRACKET_SIZES)[number];
 

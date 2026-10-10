@@ -737,3 +737,8 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 - A future opening time creates the sign-up list as UPCOMING; the status job opens it at that time (existing transition), and closes it at the closing time.
 - Admin tournament page: "Registration" box shows open/not open/closed and lets an admin change the times or open it now (`setRegistrationWindow`, admin only, audited, only while UPCOMING or OPEN; closing must be in the future and before the start).
 - Red warning on the admin page when the tournament has an entry fee but no UPI QR and no payment gateway: players can't register until a QR is uploaded or the fee is set to 0.
+
+## M58 — Any number of tournaments per game, mode and week (2026-10-10)
+
+- The owner needs several tournaments in the same week (e.g. two Free Fire Squad cups). The `@@unique([game, mode, weekOf])` rule is now a plain index, and create/edit no longer refuse a second one.
+- Public `/tournament/<game>` switches with `?t=<id>` (old `?mode=` links still work); chips show the mode, plus the title when two share a mode.

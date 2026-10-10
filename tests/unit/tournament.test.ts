@@ -6,6 +6,7 @@ import {
   nextRoundEntrants,
   pairRound,
   pickByMode,
+  pickTournament,
   walkBracket,
   lobbyStandings,
   mondayOfIstWeek,
@@ -34,6 +35,16 @@ describe("tournament page helpers", () => {
     expect(pickByMode(list, "nonsense")?.id).toBe("a");
     expect(pickByMode(list, undefined)?.id).toBe("a");
     expect(pickByMode([], "SOLO")).toBeUndefined();
+  });
+
+  it("picks by ?t=<id> first, so two tournaments of one mode can both be shown", () => {
+    const list = [
+      { id: "a", mode: "SQUAD" as const },
+      { id: "b", mode: "SQUAD" as const },
+    ];
+    expect(pickTournament(list, { t: "b" })?.id).toBe("b");
+    expect(pickTournament(list, { t: "zzz", mode: "SQUAD" })?.id).toBe("a");
+    expect(pickTournament(list, {})?.id).toBe("a");
   });
 });
 

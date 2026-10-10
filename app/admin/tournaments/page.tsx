@@ -19,7 +19,7 @@ export default async function AdminTournamentsPage() {
     <>
       <PageHeader
         title="Tournaments"
-        description="One per game and mode per week. Solo, Duo and Squad use lobby points; 1v1, 2v2, 4v4 and 5v5 use a bracket."
+        description="Create as many as you like for any game, mode and week. Solo, Duo and Squad use lobby points; 1v1, 2v2, 4v4 and 5v5 use a bracket."
       />
       <ul className="mb-10 space-y-2">
         {tournaments.map((t) => (

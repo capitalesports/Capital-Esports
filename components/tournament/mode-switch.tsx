@@ -4,30 +4,35 @@ import { gameModeLabel } from "@/lib/home";
 import type { MatchMode } from "@/lib/match-modes";
 import { chipClass } from "@/lib/ui";
 
-/** Links between this week's tournaments of one game (one per mode): `?mode=ONE_V_ONE` etc. */
+/**
+ * Links between this week's tournaments of one game: `?t=<id>`. Chips show the mode; when two
+ * tournaments share a mode, they show the title as well.
+ */
 export function TournamentModeSwitch({
   game,
   basePath,
-  modes,
-  active,
+  tournaments,
+  activeId,
 }: {
   game: Game;
   basePath: string;
-  modes: MatchMode[];
-  active: MatchMode;
+  tournaments: { id: string; mode: MatchMode; title: string }[];
+  activeId: string;
 }) {
-  if (modes.length < 2) return null;
+  if (tournaments.length < 2) return null;
+  const shared = (m: MatchMode) => tournaments.filter((t) => t.mode === m).length > 1;
   return (
-    <nav aria-label="Tournament mode" className="mb-4">
+    <nav aria-label="Tournament" className="mb-4">
       <ul className="flex flex-wrap gap-2">
-        {modes.map((m, i) => (
-          <li key={m}>
+        {tournaments.map((t, i) => (
+          <li key={t.id}>
             <Link
-              href={i === 0 ? basePath : `${basePath}?mode=${m}`}
-              aria-current={m === active ? "page" : undefined}
-              className={chipClass(m === active)}
+              href={i === 0 ? basePath : `${basePath}?t=${t.id}`}
+              aria-current={t.id === activeId ? "page" : undefined}
+              className={chipClass(t.id === activeId)}
             >
-              {gameModeLabel(game, m)}
+              {gameModeLabel(game, t.mode)}
+              {shared(t.mode) ? ` · ${t.title}` : ""}
             </Link>
           </li>
         ))}

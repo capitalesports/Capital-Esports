@@ -130,18 +130,15 @@ describe("tournament admin guards and validation", () => {
       mode: "SQUAD",
       kind: "TOURNAMENT",
     });
-    await expect(
-      createTournament(admin, {
-        game: "BGMI",
-        mode: "SQUAD",
-        title: "Second",
-        startsAt: inDays(2, "21:00"),
-        prizePool: "0",
-      }),
-    ).rejects.toMatchObject({
-      code: "CONFLICT",
-      message: "There is already a BGMI Squad tournament that week.",
+    // A second tournament for the same game, mode and week is fine (DECISIONS M58).
+    const second = await createTournament(admin, {
+      game: "BGMI",
+      mode: "SQUAD",
+      title: "Second",
+      startsAt: inDays(2, "21:00"),
+      prizePool: "0",
     });
+    expect(second.id).not.toBe(t.id);
     // Another mode for the same game and week is fine.
     const solo = await createTournament(admin, {
       game: "BGMI",

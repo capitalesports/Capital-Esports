@@ -10,7 +10,7 @@ export default function TournamentIndexPage() {
     <>
       <PageHeader
         title="Tournament"
-        description="Weekly tournaments for every game, one per mode. Pick a game."
+        description="Weekly tournaments for every game. Pick a game."
       />
       <div className="grid gap-4 sm:grid-cols-3">
         {GAME_LIST.map((g) => (

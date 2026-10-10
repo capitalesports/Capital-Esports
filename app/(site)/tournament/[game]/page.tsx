@@ -39,7 +39,7 @@ import { formatEntryFee, formatINR } from "@/lib/money";
 import { slotUnit } from "@/lib/match-modes";
 import { requireGameSlug } from "@/lib/params";
 import { formatDateIST, formatIST } from "@/lib/time";
-import { entryCountLabel, pickByMode } from "@/lib/tournament";
+import { entryCountLabel, pickTournament } from "@/lib/tournament";
 import type { PublishedWinner } from "@/server/services/tournaments";
 
 export async function generateMetadata({
@@ -48,9 +48,9 @@ export async function generateMetadata({
 }: PageProps<"/tournament/[game]">): Promise<Metadata> {
   const game = gameFromSlug((await params).game);
   if (!game) return { title: "Tournament" };
-  const t = pickByMode(
+  const t = pickTournament(
     sortByModeOrder(game, await getCurrentTournaments(game)),
-    (await searchParams).mode,
+    await searchParams,
   );
   return {
     title: t ? t.title : `${GAME_CONFIG[game].name} tournament`,
@@ -67,7 +67,7 @@ export default async function GameTournamentPage({
   const game = requireGameSlug((await params).game);
   const cfg = GAME_CONFIG[game];
   const current = sortByModeOrder(game, await getCurrentTournaments(game));
-  const t = pickByMode(current, (await searchParams).mode);
+  const t = pickTournament(current, await searchParams);
 
   if (!t) {
     return (
@@ -90,7 +90,7 @@ export default async function GameTournamentPage({
   }
 
   const basePath = `/tournament/${cfg.slug}`;
-  const path = t === current[0] ? basePath : `${basePath}?mode=${t.mode}`;
+  const path = t === current[0] ? basePath : `${basePath}?t=${t.id}`;
   const [entry, matches, user, config, sponsors, howToRegister] = await Promise.all([
     t.entryMatchId ? getPublicMatch(t.entryMatchId) : null,
     getTournamentMatches(t.id),
@@ -116,12 +116,7 @@ export default async function GameTournamentPage({
 
   return (
     <div className="py-6">
-      <TournamentModeSwitch
-        game={game}
-        basePath={basePath}
-        modes={current.map((c) => c.mode)}
-        active={t.mode}
-      />
+      <TournamentModeSwitch game={game} basePath={basePath} tournaments={current} activeId={t.id} />
       <section
         aria-labelledby="t-title"
         className={`card-ds relative isolate overflow-hidden p-5 sm:p-6 ${cfg.accent.borderSoft}`}
