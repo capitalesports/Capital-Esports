@@ -52,6 +52,8 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
     mode: "SQUAD" as MatchMode,
     title: "",
     startsAt: "",
+    registrationOpensAt: "",
+    registrationClosesAt: "",
     prizePool: "0",
     entryFee: "0",
     rulesMarkdown: "",
@@ -114,11 +116,12 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
           placeholder="BGMI Weekly Cup"
         />
       </FormField>
-      <div className="sm:col-span-2">
+      <fieldset className="border-border space-y-3 rounded-lg border p-3 sm:col-span-2">
+        <legend className="px-1 text-sm font-semibold">Tournament date &amp; time</legend>
         <FormField
           id="t-startsAt"
-          label="Starts (IST)"
-          help="Sign-ups close 30 minutes before"
+          label="Tournament starts (IST)"
+          help="When the first match is played"
           errors={fieldErrors.startsAt}
         >
           <IstDateTimePicker
@@ -129,7 +132,40 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
             onChange={(val) => set("startsAt", val)}
           />
         </FormField>
-      </div>
+      </fieldset>
+      <fieldset className="border-border space-y-3 rounded-lg border p-3 sm:col-span-2">
+        <legend className="px-1 text-sm font-semibold">Registration</legend>
+        <FormField
+          id="t-regOpens"
+          label="Registration opens (IST)"
+          help="Leave empty to open registration as soon as the tournament is created"
+          errors={fieldErrors.registrationOpensAt}
+        >
+          <IstDateTimePicker
+            id="t-regOpens"
+            label="Registration opens"
+            value={v.registrationOpensAt}
+            optional
+            invalid={!!fieldErrors.registrationOpensAt}
+            onChange={(val) => set("registrationOpensAt", val)}
+          />
+        </FormField>
+        <FormField
+          id="t-regCloses"
+          label="Registration closes (IST)"
+          help="Leave empty for 30 minutes before the start. Lobbies or the bracket are drawn at this time."
+          errors={fieldErrors.registrationClosesAt}
+        >
+          <IstDateTimePicker
+            id="t-regCloses"
+            label="Registration closes"
+            value={v.registrationClosesAt}
+            optional
+            invalid={!!fieldErrors.registrationClosesAt}
+            onChange={(val) => set("registrationClosesAt", val)}
+          />
+        </FormField>
+      </fieldset>
       <FormField id="t-prize" label="Prize pool (₹)" errors={fieldErrors.prizePool}>
         <Input
           id="t-prize"
@@ -206,8 +242,8 @@ function StructureFields({
       <div className="sm:col-span-2">
         <FormField
           id="e-startsAt"
-          label="Starts (IST)"
-          help="Sign-ups close 30 minutes before"
+          label="Tournament starts (IST)"
+          help="Changing it resets registration to close 30 minutes before; adjust it in the Registration box"
           errors={fieldErrors.startsAt}
         >
           <IstDateTimePicker

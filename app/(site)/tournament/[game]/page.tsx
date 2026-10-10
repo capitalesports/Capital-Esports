@@ -251,9 +251,19 @@ export default async function GameTournamentPage({
               />
             ) : (
               <p className="text-muted-foreground text-sm">
-                {entry?.status === "UPCOMING" ? "Sign-ups open soon." : "Sign-ups are closed."}
+                {entry?.status === "UPCOMING"
+                  ? entry.registrationOpensAt
+                    ? `Registration opens ${formatIST(entry.registrationOpensAt)}.`
+                    : "Registration opens soon."
+                  : "Registration is closed."}
               </p>
             )}
+            {entry && (entry.status === "REGISTRATION_OPEN" || entry.status === "UPCOMING") ? (
+              <p className="text-muted-foreground text-xs">
+                Registration closes {formatIST(entry.registrationClosesAt)} · tournament starts{" "}
+                {formatIST(t.startsAt)}
+              </p>
+            ) : null}
             {contentLink(howToRegister) ? (
               <a
                 href={contentLink(howToRegister)!}

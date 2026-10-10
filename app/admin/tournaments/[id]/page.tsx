@@ -17,6 +17,7 @@ import {
   TournamentSchedule,
 } from "@/components/tournament/tournament-views";
 import { PaymentQrBox } from "@/components/admin/payment-qr-box";
+import { RegistrationWindowBox } from "@/components/admin/registration-window-box";
 import { requireStaffPage } from "@/server/auth/guards";
 import { db } from "@/server/db";
 import { paymentsEnabled } from "@/server/env";
@@ -83,6 +84,18 @@ export default async function AdminTournamentPage({
           </span>
         }
       />
+      {!cancelled &&
+      entry &&
+      entry.entryFeePaise > 0 &&
+      !entry.paymentQrUrl &&
+      !paymentsEnabled() &&
+      (entry.status === "UPCOMING" || entry.status === "REGISTRATION_OPEN") ? (
+        <p role="alert" className="bg-destructive/15 text-destructive mb-4 rounded-lg p-3 text-sm">
+          <strong>Players can&apos;t register yet:</strong> this tournament has a{" "}
+          {formatEntryFee(entry.entryFeePaise)} entry fee but no payment QR. Tick &quot;Collect the
+          entry fee with my UPI QR&quot; below and upload your QR (or set the entry fee to 0).
+        </p>
+      ) : null}
       {cancelled ? (
         <p role="status" className="bg-destructive/15 text-destructive mb-4 rounded-lg p-3 text-sm">
           Cancelled {formatIST(t.cancelledAt!)}
@@ -91,6 +104,17 @@ export default async function AdminTournamentPage({
       ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-4">
+          {entry && !cancelled ? (
+            <RegistrationWindowBox
+              tournamentId={t.id}
+              status={entry.status}
+              opensAt={entry.registrationOpensAt ? utcToIstInput(entry.registrationOpensAt) : ""}
+              closesAt={utcToIstInput(entry.registrationClosesAt)}
+              opensLabel={entry.registrationOpensAt ? formatIST(entry.registrationOpensAt) : null}
+              closesLabel={formatIST(entry.registrationClosesAt)}
+              startsLabel={formatIST(t.startsAt)}
+            />
+          ) : null}
           {entry && !cancelled ? (
             <PaymentQrBox
               tournamentId={t.id}

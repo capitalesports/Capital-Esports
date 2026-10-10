@@ -730,3 +730,10 @@ Fixed:
 - **Texts:** the Refund policy, Terms and the admin refunds note now describe UPI QR payments: paid entries are final, and refunds are sent by UPI by hand.
 
 Known: payment-proof screenshots are stored at unguessable public URLs, shown only to admins.
+
+## M57 — Tournament registration opens and closes at admin-set times (2026-10-10)
+
+- Create form: separate "Tournament date & time" (start) and "Registration" (opens, closes) sections. Empty "opens" = open as soon as it is created; empty "closes" = 30 minutes before the start.
+- A future opening time creates the sign-up list as UPCOMING; the status job opens it at that time (existing transition), and closes it at the closing time.
+- Admin tournament page: "Registration" box shows open/not open/closed and lets an admin change the times or open it now (`setRegistrationWindow`, admin only, audited, only while UPCOMING or OPEN; closing must be in the future and before the start).
+- Red warning on the admin page when the tournament has an entry fee but no UPI QR and no payment gateway: players can't register until a QR is uploaded or the fee is set to 0.

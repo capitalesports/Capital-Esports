@@ -10,6 +10,7 @@ import {
   generateBracket,
   lockEntries,
   publishWinners,
+  setRegistrationWindow,
   updateTournament,
 } from "@/server/services/tournaments";
 
@@ -88,4 +89,17 @@ export async function publishWinnersAction(input: { tournamentId: string; prizes
     await publishWinners(await requireAdmin(), input);
     refresh(input.tournamentId);
   }, "Winners published to the home carousel");
+}
+
+/** When the tournament's registration opens and closes (DECISIONS M57). */
+export async function setRegistrationWindowAction(input: {
+  tournamentId: string;
+  opensAt: string;
+  closesAt: string;
+}) {
+  return runAction(async () => {
+    const r = await setRegistrationWindow(await requireAdmin(), input);
+    refresh(input.tournamentId);
+    return r;
+  }, "Registration times saved");
 }

@@ -16,6 +16,7 @@ import {
   generateBracket,
   lockEntries,
   publishWinners,
+  setRegistrationWindow,
   updateTournament,
 } from "@/server/services/tournaments";
 import { defaultPointsConfig } from "@/lib/points";
@@ -860,5 +861,95 @@ describe("admin Teams list", () => {
     expect(rows.filter((r) => r.teamName === "CSK")).toHaveLength(1);
     const events = await listTeamRegistrationEvents(mod, { game: "BGMI" });
     expect(events.map((e) => e.name)).toEqual(["CSK Cup"]);
+  });
+});
+
+describe("registration opens and closes at set times (DECISIONS M57)", () => {
+  it("stays closed until its opening time; the status job opens and closes it", async () => {
+    const t = await createTournament(admin, {
+      game: "FREE_FIRE",
+      mode: "SOLO",
+      title: "Timed Cup",
+      startsAt: inDays(3, "20:00"),
+      prizePool: "0",
+      registrationOpensAt: inDays(1, "12:00"),
+      registrationClosesAt: inDays(2, "22:00"),
+    });
+    const entry = await testDb().match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
+    expect(entry.status).toBe("UPCOMING");
+    const p = await createPlayer("FREE_FIRE");
+    await expect(
+      registerForMatch({ id: p.id, role: "PLAYER" }, { matchId: entry.id }),
+    ).rejects.toBeTruthy();
+    // The status job opens it at the opening time…
+    await runMatchStatusJob(new Date(entry.registrationOpensAt!.getTime() + 60_000));
+    expect((await testDb().match.findUniqueOrThrow({ where: { id: entry.id } })).status).toBe(
+      "REGISTRATION_OPEN",
+    );
+    // …and closes it at the closing time (not 30 minutes before the start).
+    await runMatchStatusJob(new Date(entry.registrationClosesAt.getTime() + 60_000));
+    expect((await testDb().match.findUniqueOrThrow({ where: { id: entry.id } })).status).toBe(
+      "REGISTRATION_CLOSED",
+    );
+  });
+
+  it("validates the times and lets an admin open it now or move the closing time", async () => {
+    await expect(
+      createTournament(admin, {
+        game: "BGMI",
+        mode: "SOLO",
+        title: "Bad Times Cup",
+        startsAt: inDays(2, "20:00"),
+        prizePool: "0",
+        registrationClosesAt: inDays(2, "21:00"),
+      }),
+    ).rejects.toMatchObject({
+      code: "VALIDATION",
+      fieldErrors: { registrationClosesAt: expect.any(Array) },
+    });
+    await expect(
+      createTournament(admin, {
+        game: "BGMI",
+        mode: "SOLO",
+        title: "Bad Times Cup",
+        startsAt: inDays(2, "20:00"),
+        prizePool: "0",
+        registrationOpensAt: inDays(2, "19:00"),
+        registrationClosesAt: inDays(2, "18:00"),
+      }),
+    ).rejects.toMatchObject({
+      code: "VALIDATION",
+      fieldErrors: { registrationOpensAt: expect.any(Array) },
+    });
+
+    const t = await createTournament(admin, {
+      game: "BGMI",
+      mode: "SOLO",
+      title: "Later Cup",
+      startsAt: inDays(3, "20:00"),
+      prizePool: "0",
+      registrationOpensAt: inDays(2, "12:00"),
+    });
+    await expect(
+      setRegistrationWindow(mod, { tournamentId: t.id, opensAt: "", closesAt: inDays(3, "19:00") }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      setRegistrationWindow(admin, {
+        tournamentId: t.id,
+        opensAt: "",
+        closesAt: inDays(4, "19:00"),
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+    // Empty opening time = open now.
+    expect(
+      await setRegistrationWindow(admin, {
+        tournamentId: t.id,
+        opensAt: "",
+        closesAt: inDays(3, "18:00"),
+      }),
+    ).toEqual({ opened: true });
+    const entry = await testDb().match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
+    expect(entry.status).toBe("REGISTRATION_OPEN");
+    expect(utcToIstInput(entry.registrationClosesAt)).toBe(inDays(3, "18:00"));
   });
 });

@@ -78,6 +78,16 @@ export const tournamentFormSchema = z
     entryFee: money.default(0),
     rulesMarkdown: z.string().max(20_000).default(""),
     streamUrl: httpsOrEmpty,
+    /** When sign-ups open (IST). Empty = right away. */
+    registrationOpensAt: z.preprocess(
+      (v) => (v === "" || v === null ? undefined : v),
+      istDateTime.optional(),
+    ),
+    /** When sign-ups close (IST). Empty = 30 minutes before the start. */
+    registrationClosesAt: z.preprocess(
+      (v) => (v === "" || v === null ? undefined : v),
+      istDateTime.optional(),
+    ),
   })
   .superRefine((v, ctx) => {
     if (!MODES_FOR_GAME[v.game].includes(v.mode)) {
@@ -87,7 +97,36 @@ export const tournamentFormSchema = z
         message: "This mode is not available for the chosen game",
       });
     }
+    const closes = v.registrationClosesAt ?? addMinutes(v.startsAt, -CLOSE_OFFSET_MIN);
+    for (const issue of registrationWindowIssues(v.registrationOpensAt ?? null, closes, v.startsAt))
+      ctx.addIssue({ code: "custom", ...issue });
   });
+
+/**
+ * Registration window rules (DECISIONS M57): it closes after it opens, in the future, and no later
+ * than the tournament start (lobbies or the bracket are drawn when it closes).
+ */
+function registrationWindowIssues(
+  opens: Date | null,
+  closes: Date,
+  startsAt: Date,
+  now = new Date(),
+): { path: string[]; message: string }[] {
+  const issues: { path: string[]; message: string }[] = [];
+  if (closes > startsAt)
+    issues.push({
+      path: ["registrationClosesAt"],
+      message: "Registration must close before the tournament starts",
+    });
+  if (closes <= now)
+    issues.push({ path: ["registrationClosesAt"], message: "Pick a closing time in the future" });
+  if (opens && opens >= closes)
+    issues.push({
+      path: ["registrationOpensAt"],
+      message: "Registration must open before it closes",
+    });
+  return issues;
+}
 
 async function loadTournament(tx: Tx, id: string) {
   const t = await tx.tournament.findUnique({ where: { id } });
@@ -101,7 +140,7 @@ async function loadOpenTournament(tx: Tx, id: string) {
   return t;
 }
 
-/** Create the weekly tournament and its sign-up list (registration opens immediately). */
+/** Create the weekly tournament and its sign-up list (registration opens now or at the set time). */
 export async function createTournament(actor: Actor | null, input: unknown) {
   const me = assertAdmin(actor);
   const v = parseInput(tournamentFormSchema, input);
@@ -132,11 +171,16 @@ export async function createTournament(actor: Actor | null, input: unknown) {
           title: `${v.title} — sign-up`,
           description: "Tournament sign-up list. Register here.",
           startsAt: v.startsAt,
-          registrationClosesAt: addMinutes(v.startsAt, -CLOSE_OFFSET_MIN),
+          registrationOpensAt: v.registrationOpensAt ?? null,
+          registrationClosesAt: v.registrationClosesAt ?? addMinutes(v.startsAt, -CLOSE_OFFSET_MIN),
           maxSlots: slots,
           // The fee is paid when signing up (the lobby/bracket matches copy entries, never charge again).
           entryFeePaise: v.entryFee,
-          status: "REGISTRATION_OPEN",
+          // Opens later if a future opening time was set (the status job opens it then).
+          status:
+            v.registrationOpensAt && v.registrationOpensAt > new Date()
+              ? "UPCOMING"
+              : "REGISTRATION_OPEN",
           isEntryList: true,
           tournamentId: t.id,
           createdById: me.id,
@@ -167,6 +211,76 @@ export async function createTournament(actor: Actor | null, input: unknown) {
 }
 
 const blankToUndefined = (v: unknown) => (v === "" || v === null ? undefined : v);
+
+const registrationWindowSchema = z.object({
+  tournamentId: z.string().min(1),
+  /** Empty = open now (only while not open yet). */
+  opensAt: z.preprocess(blankToUndefined, istDateTime.optional()),
+  closesAt: istDateTime,
+});
+
+/**
+ * Admin: set when the tournament's registration opens and closes (DECISIONS M57). A future opening
+ * time keeps it closed until then (the status job opens it); "open now" opens it straight away.
+ * The closing time can change until registration has closed.
+ */
+export async function setRegistrationWindow(actor: Actor | null, input: unknown, now = new Date()) {
+  const me = assertAdmin(actor);
+  const v = parseInput(registrationWindowSchema, input);
+  return db.$transaction(async (tx) => {
+    const t = await loadOpenTournament(tx, v.tournamentId);
+    const entry = await tx.match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
+    if (entry.status !== "UPCOMING" && entry.status !== "REGISTRATION_OPEN") {
+      throw new AppError(
+        "CONFLICT",
+        "Registration has already closed for this tournament (lobbies or the bracket are drawn).",
+      );
+    }
+    const alreadyOpen = entry.status === "REGISTRATION_OPEN";
+    const opens = alreadyOpen ? (entry.registrationOpensAt ?? null) : (v.opensAt ?? null);
+    const issues = registrationWindowIssues(
+      alreadyOpen ? null : opens,
+      v.closesAt,
+      t.startsAt,
+      now,
+    );
+    if (issues.length) {
+      throw new AppError(
+        "VALIDATION",
+        issues[0]!.message,
+        Object.fromEntries(
+          issues.map((i) => [
+            i.path[0] === "registrationOpensAt" ? "opensAt" : "closesAt",
+            [i.message],
+          ]),
+        ),
+      );
+    }
+    await tx.match.update({
+      where: { id: entry.id },
+      data: {
+        registrationClosesAt: v.closesAt,
+        ...(alreadyOpen ? {} : { registrationOpensAt: opens }),
+      },
+    });
+    // Not open yet, and the opening time is now (or empty = open now): open it.
+    if (!alreadyOpen && (!opens || opens <= now))
+      await applyTransition(tx, entry.id, "UPCOMING", "REGISTRATION_OPEN", { actorId: me.id });
+    await writeAudit(tx, {
+      actorId: me.id,
+      action: "tournament.registrationWindow",
+      entityType: "Tournament",
+      entityId: t.id,
+      before: {
+        opensAt: entry.registrationOpensAt,
+        closesAt: entry.registrationClosesAt,
+        status: entry.status,
+      },
+      after: { opensAt: alreadyOpen ? entry.registrationOpensAt : opens, closesAt: v.closesAt },
+    });
+    return { opened: alreadyOpen || !opens || opens <= now };
+  });
+}
 
 const updateSchema = z.object({
   tournamentId: z.string().min(1),
