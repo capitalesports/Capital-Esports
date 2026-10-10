@@ -715,3 +715,18 @@ Razorpay won't onboard us, so paid entries are collected by the owner's own UPI 
 
 ### M55 Relaunch: everyone signs up again
 For the public launch every player account is removed (`scripts/launch-reset.mjs`, M53), so players **sign up** again; the same email (or Google account) simply creates a new account. Until 31 Dec 2026 the login page shows "Capital Esports has relaunched … please sign up again" with a Sign up button (`lib/relaunch.ts`), and a wrong email/password also says "Had an account before the relaunch? Please sign up again."
+
+### M56 Second scan: UI check and URL tampering
+A full scan opened 106 page views (visitor, player and admin, desktop and phone), checking for errors, failed requests, broken images, sideways overflow and error screens. Tampering attacks (other users' ids, admin URLs, exports, odd parameters, path traversal, script injection) ran on a production build, with a code review of every dynamic route.
+
+Fixed:
+- **Admin home:** sign-up funnel bars could pass 100% and spill off the page; they are now capped.
+- **NUL characters:** a NUL (`%00`) in search, or in any form field, crashed the request. `normaliseQuery` and `parseInput` now strip it (`stripNulls`).
+- **Page numbers:** `?page=1.01`, `Infinity` and similar crashed the leaderboard, notifications and audit pages. Pages are now whole numbers from 1 to 10,000.
+- **`/profile?missing=`:** it now shows only items the site itself asks for, so a link can't put text in the warning box.
+- **`/icons/constructor`** returns 404.
+- **Game IDs can't be verified:** a captain-typed teammate is linked to an account (points, room access) only when the account's in-game name matches too. A taken ID tells the owner to contact support; admins can reset it (Admin → Users).
+- **Push subscriptions:** only real browser push services are accepted, at most 5 devices per player, rate-limited, never moved to another player. Pushes are sent in parallel with a 5-second limit each.
+- **Texts:** the Refund policy, Terms and the admin refunds note now describe UPI QR payments: paid entries are final, and refunds are sent by UPI by hand.
+
+Known: payment-proof screenshots are stored at unguessable public URLs, shown only to admins.

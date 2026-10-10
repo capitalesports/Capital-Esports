@@ -165,19 +165,19 @@ export default async function AdminHomePage() {
             <ol className="mt-2 space-y-2">
               {analytics.funnel.map((f, i) => {
                 const first = analytics.funnel[0]!.users || 1;
+                // A later step can exceed the first (e.g. logins counted after people registered):
+                // never draw past 100%.
+                const pct = Math.min(100, Math.round((f.users / first) * 100));
                 return (
                   <li key={f.name} className="text-sm">
                     <div className="flex justify-between">
                       <span>{["Logged in", "Completed profile", "First registration"][i]}</span>
                       <span className="font-semibold">
-                        {f.users} ({Math.round((f.users / first) * 100)}%)
+                        {f.users} ({pct}%)
                       </span>
                     </div>
-                    <div className="bg-muted mt-1 h-2 rounded">
-                      <div
-                        className="bg-primary h-2 rounded"
-                        style={{ width: `${Math.round((f.users / first) * 100)}%` }}
-                      />
+                    <div className="bg-muted mt-1 h-2 overflow-hidden rounded">
+                      <div className="bg-primary h-2 rounded" style={{ width: `${pct}%` }} />
                     </div>
                   </li>
                 );

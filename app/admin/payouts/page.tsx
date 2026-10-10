@@ -214,9 +214,8 @@ export default async function AdminPayoutsPage({ searchParams }: PageProps<"/adm
           Entry-fee refunds to make ({refunds.length})
         </h2>
         <p className="text-muted-foreground text-sm">
-          Refunds are sent to Razorpay automatically and retried every night. If one stays here,
-          refund it by hand (Razorpay dashboard → Transactions → Payments → search the payment ID →
-          Issue Refund), then mark it refunded.
+          Entry fees paid by UPI QR are refunded by hand: send the amount back by UPI to the player
+          (the transaction ID below shows which payment), then mark it refunded.
         </p>
         {refunds.length === 0 ? (
           <p className="text-muted-foreground text-sm">No refunds waiting.</p>

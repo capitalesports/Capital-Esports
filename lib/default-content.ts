@@ -92,8 +92,8 @@ Capital Esports organises online scrims and tournaments for Free Fire, BGMI and 
 
 ## 4. Entry fees
 
-- Some matches have an entry fee, shown in Indian Rupees on the match page. Payment is handled by our payment partner. We never see or store your card, UPI PIN or bank login.
-- Your slot is confirmed after the payment succeeds. Refunds follow our [Refund policy](/refund-policy).
+- Some matches have an entry fee, shown in Indian Rupees on the match page. You pay it by scanning our UPI QR and uploading your transaction ID and a screenshot. We never ask for your UPI PIN or bank login.
+- Your slot is confirmed once an admin has checked your payment. Paid entries are final. Refunds follow our [Refund policy](/refund-policy).
 
 ## 5. Fair play
 
@@ -173,20 +173,20 @@ This policy covers entry fees paid on capitalesports.in. Free matches have nothi
 
 ## Full refund
 
-- **Match cancelled by us:** if we cancel a match for any reason, every entry fee is refunded in full, automatically.
+- **Match cancelled by us:** if we cancel a match for any reason, every entry fee is refunded in full.
 - **Paid but no slot:** if your payment succeeded but your slot was not confirmed (for example, the match filled up while you were paying), the amount is refunded in full.
 - **Charged twice:** a duplicate payment for the same slot is refunded in full.
 
 ## No refund
 
-- If you cancel your own registration. You can still cancel before registration closes to free your slot for the waitlist, but the entry fee is not refunded.
+- **Paid entries are final:** a paid registration cannot be cancelled. (Free entries can be cancelled before registration closes.)
 - If you do not turn up (no-show).
 - If you are disqualified or banned for breaking the fair-play rules.
 - If you cannot join or play because of your own device, internet connection or game account.
 
 ## How refunds are paid
 
-Refunds go back to the original payment method (UPI, card, net banking or wallet). We start the refund within 2 working days. Your bank usually credits it within 5–7 working days after that.
+Refunds are sent by UPI to the account you paid from, within 2 working days. If we need a different UPI ID, we contact you on your registered email.
 
 ## Questions
 

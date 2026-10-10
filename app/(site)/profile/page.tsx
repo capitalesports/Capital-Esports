@@ -16,7 +16,7 @@ import { getMyPendingDeletionRequest } from "@/server/services/account-deletion"
 import { MINOR_PAYOUT_MESSAGE } from "@/server/services/payouts";
 import { maskEmail, maskPhone } from "@/lib/contact-display";
 import { isAdult } from "@/lib/payments";
-import { isProfileComplete } from "@/lib/profile";
+import { isProfileComplete, safeMissingList } from "@/lib/profile";
 import { formatIST } from "@/lib/time";
 import { safeReturnTo } from "@/lib/validators";
 
@@ -26,7 +26,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
   const user = await requirePageUser("/profile");
   const sp = await searchParams;
   const returnTo = typeof sp.returnTo === "string" ? safeReturnTo(sp.returnTo) : null;
-  const missing = typeof sp.missing === "string" ? sp.missing : null;
+  const missing = safeMissingList(sp.missing);
   const complete = isProfileComplete(user);
   const dob = user.dateOfBirth ? user.dateOfBirth.toISOString().slice(0, 10) : null;
   const deletionRequest = await getMyPendingDeletionRequest(user.id);

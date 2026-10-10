@@ -12,7 +12,8 @@ const SIZES: Record<string, { px: number; pad: number }> = {
 
 /** App icons for the PWA manifest, rendered once and cached. */
 export async function GET(_request: Request, ctx: RouteContext<"/icons/[size]">) {
-  const spec = SIZES[(await ctx.params).size];
+  const size = (await ctx.params).size;
+  const spec = Object.hasOwn(SIZES, size) ? SIZES[size] : undefined;
   if (!spec) return new Response("Not found", { status: 404 });
   const art = await artworkDataUri("app-icon");
   return new ImageResponse(<AppIcon px={spec.px} pad={spec.pad} art={art} />, {

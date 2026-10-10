@@ -8,7 +8,12 @@ export const SEARCH_MAX = 64;
 /** Normalise the navbar query; null when too short to search. */
 export function normaliseQuery(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
-  const q = raw.trim().replace(/\s+/g, " ").slice(0, SEARCH_MAX);
+  // Control characters (e.g. a NUL from "%00") would crash the database query: drop them.
+  const q = raw
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, SEARCH_MAX);
   return q.length >= SEARCH_MIN ? q : null;
 }
 

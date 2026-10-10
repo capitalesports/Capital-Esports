@@ -170,3 +170,13 @@ describe("safeReturnTo", () => {
     expect(safeReturnTo("/dashboard#top")).toBe("/dashboard#top");
   });
 });
+
+describe("profile ?missing= list", () => {
+  it("shows only items the site itself asks for", async () => {
+    const { safeMissingList } = await import("@/lib/profile");
+    expect(safeMissingList("display name, Free Fire UID")).toBe("display name, Free Fire UID");
+    expect(safeMissingList("pay Rs 500 to scam@upi")).toBeNull();
+    expect(safeMissingList("verified email, pay now")).toBe("verified email");
+    expect(safeMissingList(["x"])).toBeNull();
+  });
+});

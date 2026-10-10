@@ -68,7 +68,7 @@ export async function getStandingsPage(
   page = 1,
   pageSize = LEADERBOARD_PAGE_SIZE,
 ) {
-  const p = Math.max(1, page);
+  const p = Math.min(10_000, Math.max(1, Math.trunc(page) || 1));
   const [rows, total] = await Promise.all([
     db.leaderboardSnapshot.findMany({
       where: { seasonId },

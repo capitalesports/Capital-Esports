@@ -96,14 +96,21 @@ export async function notify(event: NotificationEvent): Promise<void> {
         where: { userId: { in: userIds }, user: { pushOptIn: true } },
       });
       const sender = getPushSender();
-      for (const sub of subs) {
-        const result = await sender.send(sub, {
-          title: message.title,
-          body: message.body,
-          url: message.url,
-        });
-        if (result === "gone") await db.pushSubscription.deleteMany({ where: { id: sub.id } });
-      }
+      // In parallel, each capped at 5 seconds: one slow push service can't hold up the rest.
+      const timeout = () => new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 5_000));
+      await Promise.all(
+        subs.map(async (sub) => {
+          try {
+            const result = await Promise.race([
+              sender.send(sub, { title: message.title, body: message.body, url: message.url }),
+              timeout(),
+            ]);
+            if (result === "gone") await db.pushSubscription.deleteMany({ where: { id: sub.id } });
+          } catch (e) {
+            console.error("push failed", sub.id, e);
+          }
+        }),
+      );
     }
 
     if (EMAIL_EVENTS.has(event.type)) await emailCopies(userIds, message);

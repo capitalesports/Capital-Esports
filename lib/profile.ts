@@ -24,7 +24,9 @@ export const PHONE_FOR_MONEY_MESSAGE =
  * (registering for that game's match, creating a team), not on the profile. Computed, never stored.
  */
 export function isProfileComplete(user: Omit<ProfileLike, "gameProfiles">): boolean {
-  return Boolean(user.displayName?.trim()) && user.dateOfBirth !== null && user.emailVerifiedAt !== null;
+  return (
+    Boolean(user.displayName?.trim()) && user.dateOfBirth !== null && user.emailVerifiedAt !== null
+  );
 }
 
 /** Free Fire and BGMI need the exact in-game name next to the numeric ID (Valorant's Riot ID has it). */
@@ -38,8 +40,31 @@ export function isGameProfileComplete(p: { game: Game; ign?: string | null }): b
 }
 
 /** The player's ID for `game`, or null (then the registration box asks for it inline). */
-export function gameProfileFor<T extends { game: Game }>(user: { gameProfiles: T[] }, game: Game): T | null {
+export function gameProfileFor<T extends { game: Game }>(
+  user: { gameProfiles: T[] },
+  game: Game,
+): T | null {
   return user.gameProfiles.find((p) => p.game === game) ?? null;
+}
+
+/** Every item missingForRegistration (or the paid-entry phone check) can name. */
+export function knownMissingItems(): string[] {
+  return [
+    ...PROFILE_ITEMS,
+    PHONE_ITEM,
+    ...Object.values(GAME_CONFIG).flatMap((g) => [g.idLabel, `${g.name} in-game name`]),
+  ];
+}
+
+/** "display name, Free Fire UID" from a URL → only the known items (links can't inject text). */
+export function safeMissingList(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const known = new Set(knownMissingItems());
+  const items = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => known.has(s));
+  return items.length ? [...new Set(items)].join(", ") : null;
 }
 
 /**

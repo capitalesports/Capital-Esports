@@ -39,19 +39,19 @@ describe("notify", () => {
   it("writes an inbox row per user and pushes only to opted-in devices", async () => {
     const m = await createMatch(adminId, { title: "Evening Scrim" });
     const [a, b] = [await createPlayer(), await createPlayer()];
-    await savePushSubscription(player(a), { endpoint: "https://push.example/a", keys: { p256dh: "p256dh-key-aaaa", auth: "auth-aaaa" } });
+    await savePushSubscription(player(a), { endpoint: "https://fcm.googleapis.com/fcm/send/a", keys: { p256dh: "p256dh-key-aaaa", auth: "auth-aaaa" } });
     await notify({ type: "REGISTRATION_CONFIRMED", userIds: [a.id, b.id, a.id], matchId: m.id });
     const rows = await testDb().notification.findMany({ orderBy: { userId: "asc" } });
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({ type: "REGISTRATION_CONFIRMED", title: "Slot confirmed", url: `/scrims/${m.id}` });
     expect(rows[0]!.body).toContain("Evening Scrim");
-    expect(pushed).toEqual([{ endpoint: "https://push.example/a", title: "Slot confirmed" }]);
+    expect(pushed).toEqual([{ endpoint: "https://fcm.googleapis.com/fcm/send/a", title: "Slot confirmed" }]);
   });
 
   it("drops subscriptions the push service reports as gone", async () => {
     const a = await createPlayer();
-    await savePushSubscription(player(a), { endpoint: "https://push.example/gone", keys: { p256dh: "p256dh-key-aaaa", auth: "auth-aaaa" } });
-    goneEndpoints.add("https://push.example/gone");
+    await savePushSubscription(player(a), { endpoint: "https://fcm.googleapis.com/fcm/send/gone", keys: { p256dh: "p256dh-key-aaaa", auth: "auth-aaaa" } });
+    goneEndpoints.add("https://fcm.googleapis.com/fcm/send/gone");
     await notify({ type: "RESULTS_APPROVED", userIds: [a.id], matchId: (await createMatch(adminId)).id });
     expect(await testDb().pushSubscription.count()).toBe(0);
   });
@@ -140,10 +140,33 @@ describe("inbox", () => {
       code: "VALIDATION",
     });
     await expect(savePushSubscription(null, {})).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
-    await savePushSubscription(player(a), { endpoint: "https://push.example/a", keys: { p256dh: "p256dh-key-aaaa", auth: "auth-aaaa" } });
+    await savePushSubscription(player(a), { endpoint: "https://fcm.googleapis.com/fcm/send/a", keys: { p256dh: "p256dh-key-aaaa", auth: "auth-aaaa" } });
     expect((await testDb().user.findUniqueOrThrow({ where: { id: a.id } })).pushOptIn).toBe(true);
     await disablePush(player(a));
     expect(await testDb().pushSubscription.count()).toBe(0);
     expect((await testDb().user.findUniqueOrThrow({ where: { id: a.id } })).pushOptIn).toBe(false);
+  });
+});
+
+describe("push subscription limits (security review)", () => {
+  it("accepts only browser push services, keeps 5 devices, and never takes over another player's device", async () => {
+    const a = await createPlayer();
+    const b = await createPlayer();
+    const keys = { p256dh: "p256dh-key-aaaa", auth: "auth-aaaa" };
+    await expect(
+      savePushSubscription(player(a), { endpoint: "https://attacker.example/slow", keys }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+    for (let i = 0; i < 7; i++)
+      await savePushSubscription(player(a), {
+        endpoint: `https://fcm.googleapis.com/fcm/send/dev${i}`,
+        keys,
+      });
+    expect(await testDb().pushSubscription.count({ where: { userId: a.id } })).toBe(5);
+    await expect(
+      savePushSubscription(player(b), {
+        endpoint: "https://fcm.googleapis.com/fcm/send/dev6",
+        keys,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 });

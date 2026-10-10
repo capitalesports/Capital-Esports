@@ -106,7 +106,7 @@ export async function saveGameProfile(actor: Actor | null, input: unknown) {
     return saved;
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const msg = `This ${label} is already linked to another account.`;
+      const msg = `This ${label} is already linked to another account. If it is yours, contact support and we will check it.`;
       throw new AppError("CONFLICT", msg, { gameId: [msg] });
     }
     throw e;
@@ -144,8 +144,16 @@ export async function eraseAccount(userId: string, approvedById: string, now = n
   }
 
   const ownRegs = await db.registration.findMany({
-    where: { userId: me.id, status: { in: [...ACTIVE_REG] }, match: { status: { in: [...UNFINISHED_MATCH] } } },
-    select: { id: true, matchId: true, match: { select: { status: true, registrationClosesAt: true } } },
+    where: {
+      userId: me.id,
+      status: { in: [...ACTIVE_REG] },
+      match: { status: { in: [...UNFINISHED_MATCH] } },
+    },
+    select: {
+      id: true,
+      matchId: true,
+      match: { select: { status: true, registrationClosesAt: true } },
+    },
   });
   const rosterSpots = await db.registrationMember.count({
     where: {
@@ -155,7 +163,10 @@ export async function eraseAccount(userId: string, approvedById: string, now = n
     },
   });
   // Deletion follows the registration window only: paid entries are refunded below (M39).
-  if (rosterSpots || ownRegs.some((r) => !canCancelRegistration({ ...r.match, entryFeePaise: 0 }, now))) {
+  if (
+    rosterSpots ||
+    ownRegs.some((r) => !canCancelRegistration({ ...r.match, entryFeePaise: 0 }, now))
+  ) {
     throw new AppError(
       "CONFLICT",
       "The player is in a match that can no longer be cancelled (or on a team roster). Approve after it ends.",
@@ -184,7 +195,8 @@ export async function eraseAccount(userId: string, approvedById: string, now = n
       }
       if (reg.status === "CONFIRMED" || reg.status === "PENDING_PAYMENT") {
         const promoted = await promoteWaitlist(tx, match);
-        if (promoted.length) events.push({ type: "WAITLIST_PROMOTED", userIds: promoted, matchId: match.id });
+        if (promoted.length)
+          events.push({ type: "WAITLIST_PROMOTED", userIds: promoted, matchId: match.id });
       }
     }
     const before = await tx.user.findUniqueOrThrow({
@@ -255,7 +267,10 @@ export async function changePhone(actor: Actor | null, input: unknown) {
     throw new AppError("BANNED", "That phone number is banned.");
   try {
     return await db.$transaction(async (tx) => {
-      const before = await tx.user.findUniqueOrThrow({ where: { id: me.id }, select: { phone: true } });
+      const before = await tx.user.findUniqueOrThrow({
+        where: { id: me.id },
+        select: { phone: true },
+      });
       if (before.phone === phone)
         throw new AppError("VALIDATION", "That is already your phone number.");
       const owner = await tx.user.findUnique({ where: { phone }, select: { id: true } });

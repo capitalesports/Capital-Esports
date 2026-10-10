@@ -203,11 +203,14 @@ async function buildRoster(
     throw new AppError("FORBIDDEN", `${who.ign} (${label} ${who.gameId}) is banned.`);
   }
 
-  // Link teammates who have an account with that ID: they get points and see the room.
+  // Link teammates who have an account with that ID: they get points and see the room. Only when
+  // the in-game name the captain typed matches that account's too: a game ID can't be verified,
+  // so someone who merely claimed another player's ID isn't handed the room (security review).
   const profiles = await tx.gameProfile.findMany({
     where: { game: match.game, gameId: { in: ids } },
     select: {
       gameId: true,
+      ign: true,
       userId: true,
       user: {
         select: {
@@ -223,6 +226,9 @@ async function buildRoster(
     const owner = profiles.find((g) => g.gameId === p.gameId);
     if (!owner || p.userId) continue;
     if (owner.user.deletedAt) continue;
+    const sameName =
+      !!owner.ign && !!p.ign && owner.ign.trim().toLowerCase() === p.ign.trim().toLowerCase();
+    if (!sameName) continue;
     if (isRegistrationBlocked(owner.user, now)) {
       throw new AppError("FORBIDDEN", `${p.ign} is blocked from registering right now.`);
     }

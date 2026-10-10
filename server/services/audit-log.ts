@@ -37,7 +37,7 @@ export async function listAuditLogs(actor: Actor | null, f: AuditFilters) {
   const to = f.to ? istInputToUtc(`${f.to}T23:59`) : null;
   if (from || to) where.createdAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) };
 
-  const page = Math.max(1, f.page ?? 1);
+  const page = Math.min(10_000, Math.max(1, Math.trunc(f.page ?? 1) || 1));
   const [rows, total, entityTypes] = await Promise.all([
     db.auditLog.findMany({
       where,

@@ -10,6 +10,10 @@ import { cancelMatch } from "@/server/services/matches";
 import { leaveRoster, registerForMatch } from "@/server/services/registration";
 import { submitResult } from "@/server/services/results";
 import { createTournament } from "@/server/services/tournaments";
+import { listMyNotifications } from "@/server/services/inbox";
+import { searchSite, normaliseQuery } from "@/server/queries/search";
+import { parseInput } from "@/server/validation";
+import { z } from "zod";
 import type { Actor } from "@/lib/roles";
 import { addDays, utcToIstInput } from "@/lib/time";
 import { createMatch, createPlayer, createUser, resetDb, testDb } from "../helpers/db";
@@ -45,7 +49,7 @@ describe("rosters: a captain can't trap another player", () => {
       matchId: m.id,
       teamName: "Grief Squad",
       players: [
-        { gameId: victimId, ign: "Victim" },
+        { gameId: victimId, ign: "Exact Ign" },
         { gameId: "71000002", ign: "Two" },
         { gameId: "71000003", ign: "Three" },
       ],
@@ -157,5 +161,38 @@ describe("email codes", () => {
     await testDb().user.update({ where: { id: staff.id }, data: { emailVerifiedAt: new Date() } });
     await requestEmailLogin({ email: "boss@example.in" }, "10.2.0.1");
     expect(stubOutbox.filter((m) => m.to === "boss@example.in")).toHaveLength(0);
+  });
+});
+
+describe("URL and input tampering (security review 2)", () => {
+  it("a game ID claimed by someone else isn't linked to a roster unless the in-game name matches too", async () => {
+    const m = await createMatch(admin.id, { game: "BGMI", mode: "SQUAD", maxSlots: 25 });
+    const cap = await createPlayer("BGMI");
+    const squatter = await createPlayer("BGMI");
+    const uid = (await testDb().gameProfile.findFirstOrThrow({ where: { userId: squatter.id } }))
+      .gameId;
+    await registerForMatch(actor(cap), {
+      matchId: m.id,
+      teamName: "Real Squad",
+      players: [
+        { gameId: uid, ign: "RealOwnerName" },
+        { gameId: "73000002", ign: "Two" },
+        { gameId: "73000003", ign: "Three" },
+      ],
+    });
+    const row = await testDb().registrationMember.findFirstOrThrow({
+      where: { matchId: m.id, gameId: uid },
+    });
+    expect(row.userId).toBeNull();
+  });
+
+  it("odd page numbers and control characters don't crash anything", async () => {
+    const p = await createPlayer();
+    await expect(listMyNotifications(actor(p), 1.01)).resolves.toBeTruthy();
+    await expect(listMyNotifications(actor(p), Number.POSITIVE_INFINITY)).resolves.toBeTruthy();
+    const q = normaliseQuery("\u0000'\"<script>");
+    expect(q).not.toContain("\u0000");
+    await expect(searchSite(q!)).resolves.toBeTruthy();
+    expect(parseInput(z.object({ a: z.string() }), { a: "x\u0000y" })).toEqual({ a: "xy" });
   });
 });
