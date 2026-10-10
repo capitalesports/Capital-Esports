@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runMatchStatusJob } from "@/server/jobs/match-status-job";
 import { listRegisteredTeams, listTeamRegistrationEvents } from "@/server/services/admin-teams";
 import { registerForMatch } from "@/server/services/registration";
+import { deleteTournament } from "@/server/services/tournament-delete";
 import { approveResults, reopenResults, saveResultRows } from "@/server/services/results";
 import {
   getCurrentTournaments,
@@ -948,5 +949,61 @@ describe("registration opens and closes at set times (DECISIONS M57)", () => {
     const entry = await testDb().match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
     expect(entry.status).toBe("REGISTRATION_OPEN");
     expect(utcToIstInput(entry.registrationClosesAt)).toBe(inDays(3, "18:00"));
+  });
+});
+
+describe("deleting a tournament (DECISIONS M59)", () => {
+  it("an admin deletes it with its sign-ups; moderators cannot; paid ones must be cancelled", async () => {
+    const t = await createTournament(admin, {
+      game: "FREE_FIRE",
+      mode: "SOLO",
+      title: "Delete Me Cup",
+      startsAt: inDays(3),
+      prizePool: "0",
+    });
+    const p = await createPlayer("FREE_FIRE");
+    await registerForMatch({ id: p.id, role: "PLAYER" }, { matchId: t.entryMatchId! });
+    await expect(deleteTournament(mod, { tournamentId: t.id })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(deleteTournament(admin, { tournamentId: "" })).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    expect(await deleteTournament(admin, { tournamentId: t.id })).toEqual({
+      matches: 1,
+      registrations: 1,
+    });
+    expect(await testDb().tournament.count({ where: { id: t.id } })).toBe(0);
+    expect(await testDb().match.count({ where: { id: t.entryMatchId! } })).toBe(0);
+    expect(await testDb().auditLog.count({ where: { action: "tournament.delete" } })).toBe(1);
+    await expect(deleteTournament(admin, { tournamentId: t.id })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+
+    const paid = await createTournament(admin, {
+      game: "FREE_FIRE",
+      mode: "SOLO",
+      title: "Paid Cup",
+      startsAt: inDays(3),
+      prizePool: "0",
+    });
+    await registerForMatch({ id: p.id, role: "PLAYER" }, { matchId: paid.entryMatchId! });
+    const reg = await testDb().registration.findFirstOrThrow({
+      where: { matchId: paid.entryMatchId! },
+    });
+    await testDb().payment.create({
+      data: {
+        userId: p.id,
+        matchId: paid.entryMatchId!,
+        registrationId: reg.id,
+        orderId: "order_del_test",
+        amountPaise: 5000,
+        status: "PAID",
+        expiresAt: new Date(),
+      },
+    });
+    await expect(deleteTournament(admin, { tournamentId: paid.id })).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
   });
 });

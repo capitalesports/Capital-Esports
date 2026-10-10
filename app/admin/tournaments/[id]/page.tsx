@@ -17,6 +17,7 @@ import {
   TournamentSchedule,
 } from "@/components/tournament/tournament-views";
 import { PaymentQrBox } from "@/components/admin/payment-qr-box";
+import { DeleteTournamentButton } from "@/components/admin/delete-tournament-button";
 import { RegistrationWindowBox } from "@/components/admin/registration-window-box";
 import { requireStaffPage } from "@/server/auth/guards";
 import { db } from "@/server/db";
@@ -172,6 +173,11 @@ export default async function AdminTournamentPage({
               <CancelTournamentForm tournamentId={t.id} />
             )
           ) : null}
+          <DeleteTournamentButton
+            tournamentId={t.id}
+            title={t.title}
+            registrations={entry?.registrations.length ?? 0}
+          />
         </div>
         <section aria-label="Sign-ups" className="card-ds space-y-3 p-4">
           <div className="flex items-center justify-between gap-2">

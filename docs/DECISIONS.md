@@ -742,3 +742,8 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 
 - The owner needs several tournaments in the same week (e.g. two Free Fire Squad cups). The `@@unique([game, mode, weekOf])` rule is now a plain index, and create/edit no longer refuse a second one.
 - Public `/tournament/<game>` switches with `?t=<id>` (old `?mode=` links still work); chips show the mode, plus the title when two share a mode.
+
+## M59 — Admins can delete a tournament (2026-10-10)
+
+- "Delete tournament" box on each admin tournament page, two-step confirm (`deleteTournament`, admin only, audited). It removes the tournament with its sign-up list, lobby/bracket matches, registrations, results and points (leaderboards refreshed, no-show strikes restored, pending prizes voided, its winner carousel items removed).
+- Money is never deleted: if any entry fee was paid (gateway payment, or a UPI proof submitted/approved) or a prize payout is approved/under way, delete is refused; cancel the tournament instead so players are refunded.

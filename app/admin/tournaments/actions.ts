@@ -13,6 +13,7 @@ import {
   setRegistrationWindow,
   updateTournament,
 } from "@/server/services/tournaments";
+import { deleteTournament } from "@/server/services/tournament-delete";
 
 function refresh(id?: string) {
   revalidatePath("/admin/tournaments");
@@ -52,6 +53,15 @@ export async function cancelTournamentAction(input: { tournamentId: string; reas
     revalidatePath("/scrims");
     return r;
   }, "Tournament cancelled; entries are being refunded");
+}
+
+export async function deleteTournamentAction(input: { tournamentId: string }) {
+  return runAction(async () => {
+    const r = await deleteTournament(await requireAdmin(), input);
+    refresh();
+    revalidatePath("/scrims");
+    return r;
+  }, "Tournament deleted");
 }
 
 export async function addLobbyMatchesAction(input: {
