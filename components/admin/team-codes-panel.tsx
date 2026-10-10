@@ -37,7 +37,9 @@ export function TeamCodesPanel({
   rows: TeamCodeRow[];
   needsPassword: boolean;
 }) {
-  const [filter, setFilter] = useState<Filter>("pending");
+  const [filter, setFilter] = useState<Filter>("all");
+  // Rows sent during this visit stay in the "Not sent" list, so they don't vanish on send.
+  const [sentHere, setSentHere] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState("");
   const [shown, setShown] = useState(PAGE);
   const pending = rows.filter((r) => !r.done && !r.sent).length;
@@ -46,13 +48,13 @@ export function TeamCodesPanel({
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
-      if (filter === "pending" && (r.done || r.sent)) return false;
+      if (filter === "pending" && (r.done || (r.sent && !sentHere.has(r.id)))) return false;
       if (filter === "sent" && !r.sent) return false;
       return (
         !q || r.teams.some((t) => t.toLowerCase().includes(q)) || r.label.toLowerCase().includes(q)
       );
     });
-  }, [rows, filter, query]);
+  }, [rows, filter, query, sentHere]);
 
   return (
     <section aria-labelledby="codes-h" className="card-ds space-y-3 p-4">
@@ -101,7 +103,12 @@ export function TeamCodesPanel({
       ) : (
         <ul className="space-y-2">
           {visible.slice(0, shown).map((r) => (
-            <TeamCodeItem key={r.id} row={r} needsPassword={needsPassword} />
+            <TeamCodeItem
+              key={r.id}
+              row={r}
+              needsPassword={needsPassword}
+              onSent={() => setSentHere((ids) => new Set(ids).add(r.id))}
+            />
           ))}
         </ul>
       )}
@@ -114,7 +121,15 @@ export function TeamCodesPanel({
   );
 }
 
-function TeamCodeItem({ row, needsPassword }: { row: TeamCodeRow; needsPassword: boolean }) {
+function TeamCodeItem({
+  row,
+  needsPassword,
+  onSent,
+}: {
+  row: TeamCodeRow;
+  needsPassword: boolean;
+  onSent: () => void;
+}) {
   const router = useRouter();
   const [roomId, setRoomId] = useState(row.roomId ?? "");
   const [roomPassword, setRoomPassword] = useState(row.roomPassword ?? "");
@@ -145,7 +160,9 @@ function TeamCodeItem({ row, needsPassword }: { row: TeamCodeRow; needsPassword:
               roomId,
               ...(needsPassword ? { roomPassword } : {}),
             });
-            if (r.ok) router.refresh();
+            if (!r.ok) return;
+            onSent();
+            router.refresh();
           }}
         >
           <Input
@@ -171,7 +188,8 @@ function TeamCodeItem({ row, needsPassword }: { row: TeamCodeRow; needsPassword:
           </Button>
           {row.sent ? (
             <span className="text-success min-h-tap inline-flex items-center gap-1 text-sm">
-              <CheckCircle2Icon aria-hidden className="size-4" /> Sent
+              <CheckCircle2Icon aria-hidden className="size-4" /> Sent: {row.roomId}
+              {row.roomPassword ? ` / ${row.roomPassword}` : ""}
             </span>
           ) : null}
         </form>
