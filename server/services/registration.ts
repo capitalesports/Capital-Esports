@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import type { RegistrationStatus } from "@/generated/prisma/client";
+import { writeAudit } from "@/server/audit";
 import { db, type Tx } from "@/server/db";
 import { paymentProvider, paymentsEnabled } from "@/server/env";
 import { AppError } from "@/server/errors";
@@ -298,7 +299,10 @@ export async function registerForMatch(
     if (block)
       throw new AppError(block === "BLOCKED" ? "FORBIDDEN" : "CONFLICT", BLOCK_MESSAGE[block]);
     if ((await alreadyInMatch(tx, matchId, [me.id])).size) {
-      throw new AppError("CONFLICT", "You are already registered for this match.");
+      throw new AppError(
+        "CONFLICT",
+        "You are already registered for this match (or on a team's roster: you can leave it from your dashboard).",
+      );
     }
 
     const existing = await tx.registration.findUnique({
@@ -545,6 +549,37 @@ export async function respondToRoster(actor: Actor | null, input: unknown, now =
 }
 
 const cancelSchema = z.object({ matchId: z.string().min(1) });
+
+/**
+ * Leave a team's roster that a captain put me on (by my game ID) before the match starts. The
+ * captain's registration stays; I'm free to register myself or with another team.
+ */
+export async function leaveRoster(actor: Actor | null, input: unknown) {
+  const me = assertUser(actor);
+  const { matchId } = parseInput(cancelSchema, input);
+  await db.$transaction(async (tx) => {
+    const match = await lockMatch(tx, matchId);
+    const row = await tx.registrationMember.findUnique({
+      where: { matchId_userId: { matchId, userId: me.id } },
+      include: { registration: { select: { id: true, userId: true } } },
+    });
+    if (!row || row.registration.userId === me.id) {
+      throw new AppError("NOT_FOUND", "You are not on another team's roster for this match.");
+    }
+    if (!["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(match.status)) {
+      throw new AppError("CONFLICT", "This match has already started.");
+    }
+    await tx.registrationMember.delete({ where: { id: row.id } });
+    await writeAudit(tx, {
+      actorId: me.id,
+      action: "registration.leaveRoster",
+      entityType: "Registration",
+      entityId: row.registration.id,
+      before: { userId: me.id, gameId: row.gameId, ign: row.ign },
+    });
+  });
+  return { left: true };
+}
 
 /**
  * Cancel my registration (or my team's, as captain) until registration closes; promotes the

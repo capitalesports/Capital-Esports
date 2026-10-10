@@ -58,12 +58,20 @@ export async function proxy(request: NextRequest) {
   const res = NextResponse.next({ request: { headers: requestHeaders } });
   res.headers.set("Content-Security-Policy", csp);
   if (claims && shouldRollSession(claims)) {
-    const secure = (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://");
-    res.cookies.set(SESSION_COOKIE, await signSession(claims.userId, secret), sessionCookieOptions(secure));
+    const secure =
+      (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://") ||
+      process.env.VERCEL_ENV === "production";
+    res.cookies.set(
+      SESSION_COOKIE,
+      await signSession(claims.userId, secret),
+      sessionCookieOptions(secure),
+    );
   }
   return res;
 }
 
 export const config = {
-  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icons/|manifest.webmanifest|sw.js|.*\.(?:png|jpg|jpeg|svg|webp|gif|ico|txt|xml)$).*)"],
+  matcher: [
+    "/((?!api/|_next/static|_next/image|favicon.ico|icons/|manifest.webmanifest|sw.js|.*\.(?:png|jpg|jpeg|svg|webp|gif|ico|txt|xml)$).*)",
+  ],
 };

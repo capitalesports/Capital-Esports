@@ -1,5 +1,5 @@
 import "server-only";
-import { isProductionDeployment } from "@/server/env";
+import { stubsForbidden } from "@/server/env";
 import { AppError } from "@/server/errors";
 import { DS } from "@/lib/design-tokens";
 import { SITE_NAME } from "@/lib/site";
@@ -57,22 +57,37 @@ export function emailConfig(): { apiKey: string; from: string } | null {
 export function getEmailSender(): EmailSender {
   const config = emailConfig();
   if (config) return new ResendSender(config);
-  if (isProductionDeployment()) throw new AppError("UNAVAILABLE", "Email is not configured.");
+  if (stubsForbidden()) throw new AppError("UNAVAILABLE", "Email is not configured.");
   return new StubSender();
 }
 
-const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ESCAPES[c]!);
 }
 
 /** Plain, dark-agnostic email body: a heading, a paragraph and an optional button link. */
-export function renderEmail(opts: { title: string; body: string; link?: { url: string; label: string } }): {
+export function renderEmail(opts: {
+  title: string;
+  body: string;
+  link?: { url: string; label: string };
+}): {
   text: string;
   html: string;
 } {
-  const text = [opts.title, "", opts.body, ...(opts.link ? ["", `${opts.link.label}: ${opts.link.url}`] : [])].join("\n");
+  const text = [
+    opts.title,
+    "",
+    opts.body,
+    ...(opts.link ? ["", `${opts.link.label}: ${opts.link.url}`] : []),
+  ].join("\n");
   const button = opts.link
     ? `<p><a href="${escapeHtml(opts.link.url)}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:${DS.gold};color:${DS.background};text-decoration:none;font-weight:600">${escapeHtml(opts.link.label)}</a></p>`
     : "";

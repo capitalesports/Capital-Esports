@@ -13,8 +13,19 @@ export function isProductionDeployment(): boolean {
   return process.env.VERCEL_ENV === "production";
 }
 
+/**
+ * Local stand-ins (OTP, payments, payouts, email, storage) use secrets that are in the repo, so they
+ * are refused on every hosted deployment (production and previews alike), not only production.
+ */
+export function stubsForbidden(): boolean {
+  return isProductionDeployment() || !!process.env.VERCEL;
+}
+
 export function secureCookies(): boolean {
-  return (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://");
+  return (
+    (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://") ||
+    process.env.VERCEL_ENV === "production"
+  );
 }
 
 export function firebaseAdminConfig(): {
@@ -32,7 +43,7 @@ export function firebaseAdminConfig(): {
 
 /** The local OTP stub is opt-in and refused on production deployments. */
 export function otpStubAllowed(): boolean {
-  return process.env.AUTH_OTP_STUB === "true" && !isProductionDeployment();
+  return process.env.AUTH_OTP_STUB === "true" && !stubsForbidden();
 }
 
 export function supabaseStorageConfig(): {

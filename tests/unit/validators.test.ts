@@ -66,10 +66,17 @@ describe("Riot ID validation", () => {
 
 describe("gameProfileSchema", () => {
   it("validates a Free Fire UID", () => {
-    expect(gameProfileSchema.safeParse({ game: "FREE_FIRE", gameId: "12345678", ign: "ÐΞΛTH々Sniper" }).success).toBe(true);
+    expect(
+      gameProfileSchema.safeParse({ game: "FREE_FIRE", gameId: "12345678", ign: "ÐΞΛTH々Sniper" })
+        .success,
+    ).toBe(true);
     // The exact in-game name is required and kept as typed (capitals, symbols, inner spaces).
-    expect(gameProfileSchema.safeParse({ game: "FREE_FIRE", gameId: "12345678" }).success).toBe(false);
-    expect(gameProfileSchema.safeParse({ game: "FREE_FIRE", gameId: "12345678", ign: "  " }).success).toBe(false);
+    expect(gameProfileSchema.safeParse({ game: "FREE_FIRE", gameId: "12345678" }).success).toBe(
+      false,
+    );
+    expect(
+      gameProfileSchema.safeParse({ game: "FREE_FIRE", gameId: "12345678", ign: "  " }).success,
+    ).toBe(false);
     expect(gameProfileSchema.safeParse({ game: "FREE_FIRE", gameId: "12ab" }).success).toBe(false);
   });
 
@@ -103,9 +110,23 @@ describe("gameProfileSchema", () => {
       region: "AP",
     });
     const b = gameProfileSchema.parse({ game: "BGMI", gameId: "5123456789", ign: "Scout" });
-    expect(gameProfileRecord(b)).toEqual({ game: "BGMI", gameId: "5123456789", ign: "Scout", region: null });
-    const f = gameProfileSchema.parse({ game: "FREE_FIRE", gameId: "12345678", ign: " Pro Killer_07 " });
-    expect(gameProfileRecord(f)).toEqual({ game: "FREE_FIRE", gameId: "12345678", ign: "Pro Killer_07", region: null });
+    expect(gameProfileRecord(b)).toEqual({
+      game: "BGMI",
+      gameId: "5123456789",
+      ign: "Scout",
+      region: null,
+    });
+    const f = gameProfileSchema.parse({
+      game: "FREE_FIRE",
+      gameId: "12345678",
+      ign: " Pro Killer_07 ",
+    });
+    expect(gameProfileRecord(f)).toEqual({
+      game: "FREE_FIRE",
+      gameId: "12345678",
+      ign: "Pro Killer_07",
+      region: null,
+    });
   });
 });
 
@@ -139,5 +160,13 @@ describe("safeReturnTo", () => {
     expect(safeReturnTo("//evil.com")).toBe("/dashboard");
     expect(safeReturnTo("/\\evil.com")).toBe("/dashboard");
     expect(safeReturnTo(null, "/")).toBe("/");
+  });
+  it("refuses tab/newline/space tricks that browsers turn into another site (security review)", () => {
+    expect(safeReturnTo("/\t/evil.com")).toBe("/dashboard");
+    expect(safeReturnTo("/\n/evil.com")).toBe("/dashboard");
+    expect(safeReturnTo("/\r\n/evil.com")).toBe("/dashboard");
+    expect(safeReturnTo("/ /evil.com")).toBe("/dashboard");
+    expect(safeReturnTo("/a\\b")).toBe("/dashboard");
+    expect(safeReturnTo("/dashboard#top")).toBe("/dashboard#top");
   });
 });

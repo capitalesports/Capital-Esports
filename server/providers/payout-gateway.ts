@@ -1,5 +1,5 @@
 import "server-only";
-import { cashfreeEnv, cashfreePayoutsConfig, isProductionDeployment } from "@/server/env";
+import { cashfreeEnv, cashfreePayoutsConfig, stubsForbidden } from "@/server/env";
 import { AppError } from "@/server/errors";
 import { paiseToRupees } from "@/lib/payments";
 
@@ -128,6 +128,6 @@ class StubPayoutGateway implements PayoutGateway {
 export function getPayoutGateway(): PayoutGateway {
   const cfg = cashfreePayoutsConfig();
   if (cfg) return new CashfreePayoutGateway(cfg);
-  if (isProductionDeployment()) throw new AppError("UNAVAILABLE", "Payouts are not configured.");
+  if (stubsForbidden()) throw new AppError("UNAVAILABLE", "Payouts are not configured.");
   return new StubPayoutGateway();
 }

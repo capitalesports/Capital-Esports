@@ -36,3 +36,14 @@ export function assertAdmin(actor: Actor | null | undefined): Actor {
   if (!hasRole(a, "ADMIN")) throw new AppError("FORBIDDEN", "Admins only.");
   return a;
 }
+
+/**
+ * Tournament matches (sign-up lists, lobbies, bracket games) are run by admins: moderators may
+ * manage scrims only (security review 2026-10-10).
+ */
+export function assertCanManageMatch(
+  actor: Actor | null | undefined,
+  match: { isEntryList: boolean; tournamentId: string | null },
+): Actor {
+  return match.isEntryList || match.tournamentId ? assertAdmin(actor) : assertModerator(actor);
+}

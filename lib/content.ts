@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSafeSitePath } from "./input-rules";
 import { GAMES } from "./games";
 import { SOCIAL_PLATFORMS } from "./site";
 import { CONTENT_KEYS, LINK_CONTENT_KEYS } from "./content-keys";
@@ -86,7 +87,7 @@ export const carouselItemSchema = z.object({
     .optional()
     .transform((v) => v || null)
     .refine(
-      (v) => v === null || v.startsWith("/") || /^https:\/\//.test(v),
+      (v) => v === null || isSafeSitePath(v) || /^https:\/\/\S+$/.test(v),
       "Use a site path (/...) or https:// link",
     ),
   order: z.coerce.number().int().min(0).max(999).default(0),

@@ -115,55 +115,63 @@ export async function runMatchStatusJob(now = new Date()): Promise<TransitionRec
       bracketRound: true,
       tournamentId: true,
     },
+    orderBy: { startsAt: "asc" },
     take: 500,
   });
 
   const applied: TransitionRecord[] = [];
   for (const candidate of candidates) {
-    let match = candidate;
-    for (let step = 0; step < 4; step++) {
-      const to = dueTransition(match, now);
-      const neverOpened =
-        !to &&
-        match.status === "UPCOMING" &&
-        match.registrationClosesAt <= now &&
-        hasMinimum(match);
-      if (!to && !neverOpened) break;
-      let cancellation: MatchCancellation | null = null;
-      let split: LobbySplit | null = null;
-      let closed: EntriesClosed | null = null;
-      try {
-        ({ cancellation, split, closed } = await db.$transaction(async (tx) => {
-          const none = { cancellation: null, split: null, closed: null };
-          if (!to) return { ...none, cancellation: await cancelIfShort(tx, match, match.status) };
-          await applyTransition(tx, match.id, match.status, to, { actorId: null });
-          if (to !== "REGISTRATION_CLOSED") return none;
-          // Tournament sign-ups: split into lobbies or draw the bracket (DECISIONS M50).
-          if (match.isEntryList)
-            return { ...none, closed: await onEntriesClosed(tx, match.id, null) };
-          const short = hasMinimum(match) ? await cancelIfShort(tx, match, to) : null;
-          if (short) return { ...none, cancellation: short };
-          // Open entry: more entries than one lobby holds become more lobbies.
-          return { ...none, split: await splitIntoLobbies(tx, match.id, null) };
-        }));
-      } catch (e) {
-        // Another run (or an admin) moved it first: stop here, the next run re-evaluates.
-        if (isAppError(e) && e.code === "CONFLICT") break;
-        throw e;
-      }
-      if (to) applied.push({ matchId: match.id, from: match.status, to });
-      if (cancellation) {
-        applied.push({ matchId: match.id, from: to ?? match.status, to: "CANCELLED" });
-        await finishCancellation(cancellation);
-        break;
-      }
-      if (!to) break;
-      await sendLobbyNotices(split);
-      await finishEntriesClosed(closed);
-      if (to === "LIVE") await releaseUnplaced(match.id);
-      if (match.status === "LIVE" && to === "RESULTS_PENDING") await notifyResultsOpen(match.id);
-      match = { ...match, status: to };
+    try {
+      await advanceMatch(candidate, now, applied);
+    } catch (e) {
+      // One broken match must never stop status changes for every other match (they retry next run).
+      console.error("[match-status] failed for match", candidate.id, e);
     }
   }
   return applied;
+}
+
+/** Apply every due step to one match (up to 4: open → close → live → results). */
+async function advanceMatch(candidate: Candidate, now: Date, applied: TransitionRecord[]) {
+  let match = candidate;
+  for (let step = 0; step < 4; step++) {
+    const to = dueTransition(match, now);
+    const neverOpened =
+      !to && match.status === "UPCOMING" && match.registrationClosesAt <= now && hasMinimum(match);
+    if (!to && !neverOpened) break;
+    let cancellation: MatchCancellation | null = null;
+    let split: LobbySplit | null = null;
+    let closed: EntriesClosed | null = null;
+    try {
+      ({ cancellation, split, closed } = await db.$transaction(async (tx) => {
+        const none = { cancellation: null, split: null, closed: null };
+        if (!to) return { ...none, cancellation: await cancelIfShort(tx, match, match.status) };
+        await applyTransition(tx, match.id, match.status, to, { actorId: null });
+        if (to !== "REGISTRATION_CLOSED") return none;
+        // Tournament sign-ups: split into lobbies or draw the bracket (DECISIONS M50).
+        if (match.isEntryList)
+          return { ...none, closed: await onEntriesClosed(tx, match.id, null) };
+        const short = hasMinimum(match) ? await cancelIfShort(tx, match, to) : null;
+        if (short) return { ...none, cancellation: short };
+        // Open entry: more entries than one lobby holds become more lobbies.
+        return { ...none, split: await splitIntoLobbies(tx, match.id, null) };
+      }));
+    } catch (e) {
+      // Another run (or an admin) moved it first: stop here, the next run re-evaluates.
+      if (isAppError(e) && e.code === "CONFLICT") break;
+      throw e;
+    }
+    if (to) applied.push({ matchId: match.id, from: match.status, to });
+    if (cancellation) {
+      applied.push({ matchId: match.id, from: to ?? match.status, to: "CANCELLED" });
+      await finishCancellation(cancellation);
+      break;
+    }
+    if (!to) break;
+    await sendLobbyNotices(split);
+    await finishEntriesClosed(closed);
+    if (to === "LIVE") await releaseUnplaced(match.id);
+    if (match.status === "LIVE" && to === "RESULTS_PENDING") await notifyResultsOpen(match.id);
+    match = { ...match, status: to };
+  }
 }

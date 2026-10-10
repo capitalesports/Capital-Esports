@@ -39,6 +39,21 @@ export async function enterPendingPayment(
   match: { id: string; entryFeePaise: number },
   now = new Date(),
 ) {
+  const earlier = await tx.payment.findUnique({ where: { registrationId: reg.id } });
+  if (earlier?.status === "PAID") {
+    // Already paid (e.g. a paid side left waiting for an opponent, then placed): no second charge.
+    await tx.registration.update({
+      where: { id: reg.id },
+      data: { status: "CONFIRMED", cancelledAt: null, paymentId: earlier.id },
+    });
+    return earlier;
+  }
+  if (earlier?.status === "REFUND_PENDING") {
+    throw new AppError(
+      "CONFLICT",
+      "This entry's earlier payment is being refunded. Try again once the refund completes.",
+    );
+  }
   await tx.registration.update({
     where: { id: reg.id },
     data: { status: "PENDING_PAYMENT", cancelledAt: null },
@@ -110,10 +125,13 @@ export async function startCheckout(actor: Actor | null, input: unknown, now = n
       notifyUrl: `${site}/api/webhooks/cashfree`,
       expiresAt: addMinutes(payment.expiresAt, 5),
     });
-    payment = await db.payment.update({
-      where: { id: payment.id },
+    // Two tabs at once: only the first order is kept, so a payment on it is never orphaned.
+    const { count } = await db.payment.updateMany({
+      where: { id: payment.id, sessionId: null },
       data: { sessionId: paymentSessionId },
     });
+    payment = await db.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    if (!count && !payment.sessionId) throw new AppError("CONFLICT", "Please try again.");
   }
   return {
     orderId: payment.orderId,
@@ -211,6 +229,7 @@ async function lockMatchRow(tx: Tx, matchId: string) {
       status: true,
       maxSlots: true,
       startsAt: true,
+      registrationClosesAt: true,
       entryFeePaise: true,
       isEntryList: true,
       tournamentId: true,
@@ -311,7 +330,10 @@ export async function applyPaymentEvent(
     if (next === "FAILED") return "FAILED";
 
     const reg = await tx.registration.findUniqueOrThrow({ where: { id: payment.registrationId } });
-    if (reg.status === "PENDING_PAYMENT") {
+    const signUpClosed =
+      match.isEntryList &&
+      (match.status !== "REGISTRATION_OPEN" || now >= match.registrationClosesAt);
+    if (reg.status === "PENDING_PAYMENT" && !signUpClosed) {
       await tx.registration.update({ where: { id: reg.id }, data: { status: "CONFIRMED" } });
       events.push({ type: "REGISTRATION_CONFIRMED", userIds: [reg.userId], matchId: match.id });
       return "CONFIRMED";

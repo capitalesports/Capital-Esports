@@ -13,6 +13,7 @@ import {
 import { BLOCK_MESSAGE, canCancelRegistration, registrationBlock } from "@/lib/registration-rules";
 import { db } from "@/server/db";
 import { referralRewardsFor } from "@/server/services/referrals";
+import { FREE_SLOT_MAX_FEE_PAISE } from "@/lib/referral";
 import { getMyTeamsForGame, getViewerEntry, waitlistRank, type PublicMatch } from "./matches";
 
 async function pendingPayment(registrationId: string, status: string, userId: string) {
@@ -23,7 +24,10 @@ async function pendingPayment(registrationId: string, status: string, userId: st
   });
   if (!p) return null;
   // Referral reward (M52): free slots the player can spend instead of paying.
-  const { available } = await referralRewardsFor(db, userId);
+  const { available } =
+    p.amountPaise <= FREE_SLOT_MAX_FEE_PAISE
+      ? await referralRewardsFor(db, userId)
+      : { available: 0 };
   return { amountPaise: p.amountPaise, expiresAt: p.expiresAt.toISOString(), freeSlots: available };
 }
 

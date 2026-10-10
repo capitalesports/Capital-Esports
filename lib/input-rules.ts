@@ -76,12 +76,27 @@ export function canonicalGameId(game: Game, gameId: string): string {
   return riot ? `${riot.name}#${riot.tag}`.toLowerCase() : trimmed.toLowerCase();
 }
 
-/** Only allow same-site relative paths as post-login redirects (no open redirects). */
+/**
+ * Only allow same-site relative paths as post-login redirects (no open redirects). Browsers drop
+ * tabs and newlines inside URLs ("/<TAB>/evil.com" becomes "//evil.com"), so control characters,
+ * whitespace and backslashes are refused outright, and the result must stay on this origin.
+ */
 export function safeReturnTo(value: string | null | undefined, fallback = "/dashboard"): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return fallback;
+  if (/[\u0000-\u001f\u007f\s\\]/.test(value)) return fallback;
+  try {
+    const base = "https://same-origin.invalid";
+    const url = new URL(value, base);
+    if (url.origin !== base) return fallback;
+  } catch {
     return fallback;
   }
   return value;
+}
+
+/** A same-site path ("/scrims") that can't turn into another site ("//evil", "/<TAB>/evil"). */
+export function isSafeSitePath(value: string): boolean {
+  return safeReturnTo(value, "") === value;
 }
 
 /** Account deletion requests (DECISIONS M39): the player's optional reason, the admin's note. */

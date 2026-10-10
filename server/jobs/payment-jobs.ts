@@ -14,8 +14,21 @@ import { lockMatch, promoteWaitlist } from "@/server/services/registration";
  */
 export async function runPaymentExpiryJob(now = new Date()) {
   const due = await db.payment.findMany({
-    where: { status: { in: ["CREATED", "FAILED"] }, expiresAt: { lte: now } },
+    // Only entries still waiting: old failed attempts of finished entries must not fill the batch.
+    where: {
+      status: { in: ["CREATED", "FAILED"] },
+      expiresAt: { lte: now },
+      registrationId: {
+        in: (
+          await db.registration.findMany({
+            where: { status: "PENDING_PAYMENT" },
+            select: { id: true },
+          })
+        ).map((r) => r.id),
+      },
+    },
     include: { match: { select: { id: true } } },
+    orderBy: { expiresAt: "asc" },
     take: 200,
   });
   let expired = 0;
@@ -31,22 +44,28 @@ export async function runPaymentExpiryJob(now = new Date()) {
     } catch {
       // Provider unreachable: expire anyway; a late success webhook refunds or re-confirms.
     }
-    const didExpire = await db.$transaction(async (tx) => {
-      const match = await lockMatch(tx, p.matchId);
-      const current = await tx.registration.findUniqueOrThrow({ where: { id: reg.id } });
-      if (current.status !== "PENDING_PAYMENT") return false;
-      await tx.registration.update({
-        where: { id: reg.id },
-        data: { status: "CANCELLED", cancelledAt: now },
+    // One bad row must not stop the rest of the batch.
+    const didExpire = await db
+      .$transaction(async (tx) => {
+        const match = await lockMatch(tx, p.matchId);
+        const current = await tx.registration.findUniqueOrThrow({ where: { id: reg.id } });
+        if (current.status !== "PENDING_PAYMENT") return false;
+        await tx.registration.update({
+          where: { id: reg.id },
+          data: { status: "CANCELLED", cancelledAt: now },
+        });
+        await tx.registrationMember.deleteMany({ where: { registrationId: reg.id } });
+        await tx.payment.updateMany({
+          where: { id: p.id, status: "CREATED" },
+          data: { status: "FAILED" },
+        });
+        await promoteWaitlist(tx, match);
+        return true;
+      })
+      .catch((e) => {
+        console.error("[payment-expiry] failed for payment", p.id, e);
+        return false;
       });
-      await tx.registrationMember.deleteMany({ where: { registrationId: reg.id } });
-      await tx.payment.updateMany({
-        where: { id: p.id, status: "CREATED" },
-        data: { status: "FAILED" },
-      });
-      await promoteWaitlist(tx, match);
-      return true;
-    });
     if (didExpire) expired++;
   }
   return { expired, recovered };

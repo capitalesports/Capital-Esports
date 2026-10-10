@@ -6,7 +6,7 @@ import { AppError } from "@/server/errors";
 import { getEmailSender } from "@/server/providers/email";
 import { enforceRateLimit } from "@/server/rate-limit";
 import { parseInput } from "@/server/validation";
-import { hashPassword, PASSWORD_RULES } from "@/lib/password-hash";
+import { hashPassword, PASSWORD_RULES, verifyPassword } from "@/lib/password-hash";
 import { isProfileComplete } from "@/lib/profile";
 import { dateOfBirthSchema, displayNameSchema } from "@/lib/validators";
 import { assertAccountCanLogIn, assertPhoneNotBanned } from "./auth";
@@ -45,19 +45,51 @@ export async function startPasswordSignup(input: unknown, ip: string): Promise<{
     );
   }
   const rate = "Too many sign-up attempts. Please wait 15 minutes and try again.";
-  await enforceRateLimit(`signup:ip:${ip}`, EMAIL_RATE_LIMITS.perIp.limit, EMAIL_RATE_LIMITS.perIp.windowSeconds, rate);
-  await enforceRateLimit(`signup:${email}`, EMAIL_RATE_LIMITS.perEmail.limit, EMAIL_RATE_LIMITS.perEmail.windowSeconds, rate);
+  await enforceRateLimit(
+    `signup:ip:${ip}`,
+    EMAIL_RATE_LIMITS.perIp.limit,
+    EMAIL_RATE_LIMITS.perIp.windowSeconds,
+    rate,
+  );
+  await enforceRateLimit(
+    `signup:${email}`,
+    EMAIL_RATE_LIMITS.perEmail.limit,
+    EMAIL_RATE_LIMITS.perEmail.windowSeconds,
+    rate,
+  );
   await assertPhoneNotBanned(null, email);
 
   const existing = await db.user.findUnique({ where: { email } });
-  if (existing && (existing.emailVerifiedAt || existing.googleId || existing.phone || existing.deletedAt)) {
+  if (
+    existing &&
+    (existing.emailVerifiedAt || existing.googleId || existing.phone || existing.deletedAt)
+  ) {
     throw TAKEN();
   }
   const data = { displayName, dateOfBirth, passwordHash: await hashPassword(password) };
   let user: { id: string };
   if (existing) {
+    // While a code is still out, only the same person (same password: "Resend code") may continue;
+    // someone else can't swap in their own password for a victim's pending sign-up.
+    const pending = await db.emailCode.findFirst({
+      where: {
+        userId: existing.id,
+        purpose: "VERIFY",
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+    const samePerson =
+      !!existing.passwordHash && (await verifyPassword(password, existing.passwordHash));
+    if (pending && !samePerson) {
+      throw new AppError(
+        "CONFLICT",
+        "A sign-up for this email is waiting for its code. Enter the code from that email, or try again in 10 minutes.",
+      );
+    }
     // An earlier attempt that never entered its code proved nothing: this attempt replaces it.
-    user = await db.user.update({ where: { id: existing.id }, data });
+    user = samePerson ? existing : await db.user.update({ where: { id: existing.id }, data });
   } else {
     try {
       user = await db.user.create({ data: { ...data, email } });

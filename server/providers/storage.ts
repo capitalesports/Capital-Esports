@@ -1,7 +1,7 @@
 import "server-only";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { supabaseStorageConfig, isProductionDeployment } from "@/server/env";
+import { supabaseStorageConfig, stubsForbidden } from "@/server/env";
 import { AppError } from "@/server/errors";
 
 /** Object storage for avatars and result screenshots. */
@@ -100,7 +100,6 @@ export function getStorage(): StorageProvider {
   if (cfg) return new SupabaseStorage(cfg);
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (blobToken) return new VercelBlobStorage(blobToken);
-  if (isProductionDeployment())
-    throw new AppError("UNAVAILABLE", "File uploads are not configured.");
+  if (stubsForbidden()) throw new AppError("UNAVAILABLE", "File uploads are not configured.");
   return new LocalDiskStorage();
 }

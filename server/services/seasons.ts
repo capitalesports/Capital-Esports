@@ -133,7 +133,7 @@ export async function startSeason(actor: Actor | null, input: unknown) {
 export function csvCell(v: string | number | null): string {
   const s = v === null ? "" : String(v);
   // Neutralise spreadsheet formulas and quote everything.
-  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
   return `"${safe.replace(/"/g, '""')}"`;
 }
 

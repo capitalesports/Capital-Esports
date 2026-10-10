@@ -30,6 +30,17 @@ export async function consumeRateLimit(
   return { allowed: count <= limit, count, retryAfterSeconds };
 }
 
+/** Units used in the current window, without consuming one. */
+export async function peekRateLimit(key: string, windowSeconds: number, now = new Date()) {
+  const windowMs = windowSeconds * 1000;
+  const windowStart = new Date(Math.floor(now.getTime() / windowMs) * windowMs);
+  const row = await db.rateLimit.findUnique({
+    where: { key_windowStart: { key, windowStart } },
+    select: { count: true },
+  });
+  return row?.count ?? 0;
+}
+
 /** Consume one unit or throw RATE_LIMITED with a friendly message. */
 export async function enforceRateLimit(
   key: string,

@@ -3,6 +3,7 @@ import { IntentLink as Link } from "@/components/common/intent-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { GameBadge } from "@/components/game/game-badge";
+import { LeaveRosterButton } from "@/components/match/leave-roster-button";
 import { RoomPanel } from "@/components/match/room-panel";
 import { StatusPill } from "@/components/match/status-pill";
 import { BracketView } from "@/components/tournament/tournament-views";
@@ -231,6 +232,12 @@ export default async function DashboardPage() {
                   e.status === "CONFIRMED" &&
                   (e.userId === user.id || e.members[0]?.status === "CONFIRMED") ? (
                     <RoomPanel matchId={e.match.id} />
+                  ) : null}
+                  {e.userId !== user.id &&
+                  ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(
+                    e.match.status,
+                  ) ? (
+                    <LeaveRosterButton matchId={e.match.id} teamName={teamName ?? "this team"} />
                   ) : null}
                 </article>
               );

@@ -1,4 +1,5 @@
 import "server-only";
+import { PLAYERS_SUBMIT_RESULTS } from "@/lib/results-config";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { writeAudit } from "@/server/audit";
@@ -93,6 +94,9 @@ export async function submitResult(
   screenshot: Uint8Array | null,
 ) {
   const me = assertUser(actor);
+  // Results come from staff screenshot reads (M48); the player form is off and so is this path.
+  if (!PLAYERS_SUBMIT_RESULTS)
+    throw new AppError("FORBIDDEN", "Results are entered by the match staff.");
   const data = parseInput(submitSchema, input);
   await enforceRateLimit(
     `result:${me.id}`,
@@ -297,7 +301,9 @@ export async function approveResults(actor: Actor | null, input: unknown, now = 
       const result = results.find((r) => r.registrationId === reg.id);
       const players = await playersFor(tx, reg);
       if (!result) {
-        noShows.push(...players);
+        // The registrant (captain) answers for a no-show: roster players may have been entered by
+        // game ID without agreeing, so they never get a strike for it (security review 2026-10-10).
+        noShows.push(reg.userId);
         await tx.registration.update({ where: { id: reg.id }, data: { status: "NO_SHOW" } });
         continue;
       }
@@ -384,7 +390,7 @@ export async function restoreNoShows(tx: Tx, matchId: string): Promise<number> {
   const noShowRegs = await tx.registration.findMany({ where: { matchId, status: "NO_SHOW" } });
   for (const reg of noShowRegs) {
     await tx.registration.update({ where: { id: reg.id }, data: { status: "CONFIRMED" } });
-    for (const userId of await playersFor(tx, reg)) {
+    for (const userId of [reg.userId]) {
       const u = await tx.user.findUniqueOrThrow({
         where: { id: userId },
         select: { strikes: true },
@@ -456,7 +462,8 @@ export async function reopenResults(actor: Actor | null, input: unknown, now = n
     // Un-started prize payouts follow the reopened results (scrim prize, unpublished podium).
     const payouts = await import("./payouts");
     await payouts.syncMatchPrizePayout(tx, matchId, me.id);
-    if (tournament?.winnersPublishedAt) await payouts.syncTournamentPrizePayouts(tx, tournament.id, me.id);
+    if (tournament?.winnersPublishedAt)
+      await payouts.syncTournamentPrizePayouts(tx, tournament.id, me.id);
     await writeAudit(tx, {
       actorId: me.id,
       action: "results.reopen.detail",

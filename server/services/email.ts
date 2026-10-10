@@ -7,7 +7,7 @@ import { db } from "@/server/db";
 import { sessionSecret, siteUrlServer } from "@/server/env";
 import { AppError } from "@/server/errors";
 import { getEmailSender, renderEmail } from "@/server/providers/email";
-import { enforceRateLimit } from "@/server/rate-limit";
+import { consumeRateLimit, enforceRateLimit, peekRateLimit } from "@/server/rate-limit";
 import { parseInput } from "@/server/validation";
 import { normalizeEmail } from "@/lib/input-rules";
 import { SITE_NAME } from "@/lib/site";
@@ -31,7 +31,10 @@ export const emailField = z.string().transform((v, ctx) => {
   }
   return email;
 });
-export const codeField = z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code");
+export const codeField = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/, "Enter the 6-digit code");
 
 function hashCode(code: string): string {
   return createHash("sha256").update(`${sessionSecret()}:email-code:${code}`).digest("hex");
@@ -66,8 +69,16 @@ export async function sendCode(
     purpose === "LOGIN"
       ? `Your ${SITE_NAME} login code is ${code}. It expires in ${EMAIL_CODE.ttlMinutes} minutes. If you didn't try to log in, ignore this email.`
       : `Your code to verify this email on ${SITE_NAME} is ${code}. It expires in ${EMAIL_CODE.ttlMinutes} minutes.`;
-  await getEmailSender().send({ to: email, subject: `${code} is your ${title.toLowerCase()}`, ...renderEmail({ title, body }) });
+  await getEmailSender().send({
+    to: email,
+    subject: `${code} is your ${title.toLowerCase()}`,
+    ...renderEmail({ title, body }),
+  });
 }
+
+/** Wrong codes per email across all its codes in a day: new codes don't reset the count. */
+export const CODE_FAILURES_PER_DAY = 10;
+const codeFailKey = (email: string) => `email:codefail:${email}`;
 
 /** Check a code; wrong codes count towards the attempt limit. Returns the matched code row. */
 export async function consumeCode(where: Prisma.EmailCodeWhereInput, code: string) {
@@ -75,12 +86,23 @@ export async function consumeCode(where: Prisma.EmailCodeWhereInput, code: strin
     where: { ...where, usedAt: null },
     orderBy: { createdAt: "desc" },
   });
-  const invalid = new AppError("VALIDATION", "That code is wrong or has expired. Request a new one.", {
-    code: ["Wrong or expired code"],
-  });
+  const invalid = new AppError(
+    "VALIDATION",
+    "That code is wrong or has expired. Request a new one.",
+    {
+      code: ["Wrong or expired code"],
+    },
+  );
   if (!row || row.expiresAt < new Date() || row.attempts >= EMAIL_CODE.maxAttempts) throw invalid;
+  if ((await peekRateLimit(codeFailKey(row.email), 86_400)) >= CODE_FAILURES_PER_DAY) {
+    throw new AppError(
+      "RATE_LIMITED",
+      "Too many wrong codes for this email. Please try again tomorrow.",
+    );
+  }
   if (!sameHash(row.codeHash, hashCode(code))) {
     await db.emailCode.update({ where: { id: row.id }, data: { attempts: { increment: 1 } } });
+    await consumeRateLimit(codeFailKey(row.email), CODE_FAILURES_PER_DAY, 86_400);
     throw invalid;
   }
   // Conditional update: two requests with the same code can't both succeed.
@@ -165,9 +187,15 @@ export async function confirmEmailVerification(actor: Actor | null, input: unkno
 export async function removeEmail(actor: Actor | null) {
   const me = assertUser(actor);
   await db.$transaction(async (tx) => {
-    const before = await tx.user.findUniqueOrThrow({ where: { id: me.id }, select: { email: true } });
+    const before = await tx.user.findUniqueOrThrow({
+      where: { id: me.id },
+      select: { email: true },
+    });
     await tx.user.update({ where: { id: me.id }, data: { email: null, emailVerifiedAt: null } });
-    await tx.emailCode.updateMany({ where: { userId: me.id, usedAt: null }, data: { usedAt: new Date() } });
+    await tx.emailCode.updateMany({
+      where: { userId: me.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
     await writeAudit(tx, {
       actorId: me.id,
       action: "user.email.remove",
@@ -196,13 +224,25 @@ export async function setEmailOptIn(actor: Actor | null, input: unknown) {
 export async function requestEmailLogin(input: unknown, ip: string) {
   const { email } = parseInput(z.object({ email: emailField }), input);
   const rate = "Too many codes requested. Please wait 15 minutes and try again.";
-  await enforceRateLimit(`email:login:ip:${ip}`, EMAIL_RATE_LIMITS.perIp.limit, EMAIL_RATE_LIMITS.perIp.windowSeconds, rate);
-  await enforceRateLimit(`email:login:${email}`, EMAIL_RATE_LIMITS.perEmail.limit, EMAIL_RATE_LIMITS.perEmail.windowSeconds, rate);
+  await enforceRateLimit(
+    `email:login:ip:${ip}`,
+    EMAIL_RATE_LIMITS.perIp.limit,
+    EMAIL_RATE_LIMITS.perIp.windowSeconds,
+    rate,
+  );
+  await enforceRateLimit(
+    `email:login:${email}`,
+    EMAIL_RATE_LIMITS.perEmail.limit,
+    EMAIL_RATE_LIMITS.perEmail.windowSeconds,
+    rate,
+  );
   const user = await db.user.findUnique({
     where: { email },
-    select: { id: true, emailVerifiedAt: true, deletedAt: true },
+    select: { id: true, emailVerifiedAt: true, deletedAt: true, role: true },
   });
-  if (user?.emailVerifiedAt && !user.deletedAt) await sendCode(user, email, "LOGIN");
+  // Staff log in with their password only: an emailed 6-digit code is too weak for admin access.
+  if (user?.emailVerifiedAt && !user.deletedAt && user.role === "PLAYER")
+    await sendCode(user, email, "LOGIN");
   return { email };
 }
 
@@ -216,7 +256,8 @@ export async function loginWithEmailCode(
     where: { email },
     include: { gameProfiles: { select: { game: true } } },
   });
-  if (!user?.emailVerifiedAt) throw new AppError("VALIDATION", "That code is wrong or has expired.");
+  if (!user?.emailVerifiedAt || user.role !== "PLAYER")
+    throw new AppError("VALIDATION", "That code is wrong or has expired.");
   await assertPhoneNotBanned(user.phone);
   assertAccountCanLogIn(user);
   return { id: user.id, isNew: false, profileComplete: isProfileComplete(user) };
@@ -224,5 +265,7 @@ export async function loginWithEmailCode(
 
 /** Absolute link for emails ("/scrims/abc" → "https://site/scrims/abc"). */
 export function absoluteUrl(path: string): string {
-  return /^https?:\/\//.test(path) ? path : `${siteUrlServer()}${path.startsWith("/") ? path : `/${path}`}`;
+  return /^https?:\/\//.test(path)
+    ? path
+    : `${siteUrlServer()}${path.startsWith("/") ? path : `/${path}`}`;
 }

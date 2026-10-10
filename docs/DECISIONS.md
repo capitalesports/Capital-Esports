@@ -657,3 +657,41 @@ At the owner's request, players can refer friends and staff can see what the ref
   - On a paid entry waiting for payment, "Use a free slot" (`redeemReferralCredit`) confirms it without paying. It is recorded in `ReferralCreditUse`, the pending payment is marked FAILED, and the action is audited (`referral.redeem`). If the gateway payment completes anyway, the payment wins and the free slot returns.
   - The Refer page highlights the offer with a progress bar; the admin report shows free slots earned.
   - There are no cash or wallet rewards (gaming-law and gateway risk).
+
+### M53 Pre-launch security review and reset
+Before the public launch, the owner asked for a full bug and security check and a clean start.
+
+**Review:** four read-only reviews covered auth/sessions, authorization/data exposure, money/game integrity and web/input security, plus black-box checks on the live site. Nothing critical was found. Fixed:
+- **Login and accounts:**
+  - `safeReturnTo` refuses control characters, whitespace and backslashes and must stay on our origin: `/\t/evil.com` was an open redirect after login. Admin content links use the same check (`isSafeSitePath`).
+  - Emailed codes: wrong codes are counted per email across all codes (10 per day, then locked until tomorrow). Staff never get an email login code; they use their password.
+  - A pending email sign-up can't be taken over: while its code is out, only the same password (Resend) continues, and anyone else gets CONFLICT.
+- **Rosters:**
+  - A player a captain entered by game ID can "Leave this roster" from the dashboard before the match starts (`leaveRoster`).
+  - No-show strikes go to the registrant (captain) only.
+- **Moderators** manage scrims only. Tournament sign-up lists, lobby and bracket matches need an admin to create, edit, cancel, open/close, or remove/promote entries (`assertCanManageMatch`). A tournament sign-up list can't lose entries once lobbies or the bracket are drawn.
+- **Players can't submit results** while `PLAYERS_SUBMIT_RESULTS` is false: the service refuses, not just the form.
+- **Status job:** one failing match no longer stops status changes for every match (per-match try/catch, oldest first).
+- **Payments** (dormant until a gateway is live):
+  - A PAID payment is never reset to unpaid when its entry is promoted again.
+  - The 10-minute expiry also runs from the status catch-up, only on entries still waiting, and per row.
+  - A tournament sign-up paid after registration closed is refunded rather than slipped into the draw.
+  - Two checkout tabs reuse one order.
+- **Referral rewards:**
+  - A referred player's paid entry counts only from ₹50 and once that match was played.
+  - A free slot covers entries up to ₹100 and can't be used after registration closes.
+  - Banned referred accounts don't count.
+- **Hosting:**
+  - Stubs (OTP, payments, payouts, email, storage), whose secrets are in the repo, are refused on every Vercel deployment, not only production.
+  - Session cookies are always Secure on production.
+  - The cron check can't throw on odd headers.
+  - CSV cells starting with tab or CR are neutralised too.
+- **Dependencies:** Next.js 16.3.6 → 16.3.8 (security advisories) and sharp → 0.35.5. shadcn moved to devDependencies. `npm audit --omit=dev`: 0 vulnerabilities.
+
+**Known, accepted for now:**
+- Sessions can't be revoked server-side (logout clears the cookie; bans and deletions are checked on every request).
+- Per-email rate limits can be used to slow one person's logins.
+- Sign-up says when an email is already registered.
+- Moderators can set scrim prizes (payouts still need an admin).
+
+**Reset:** `scripts/launch-reset.mjs` (dry run by default; `--confirm=<db host>` to apply) deletes every player account and all player and test data in one transaction. It keeps staff accounts and site settings (content, sponsors, social links, seasons, points tables) and writes one `launch.reset` audit entry.

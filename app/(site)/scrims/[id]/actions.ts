@@ -6,6 +6,7 @@ import { requireUser } from "@/server/auth/guards";
 import { AppError } from "@/server/errors";
 import {
   cancelRegistration,
+  leaveRoster,
   registerForMatch,
   respondToRoster,
 } from "@/server/services/registration";
@@ -97,4 +98,12 @@ export async function redeemFreeSlotAction(input: { matchId: string }) {
     revalidatePath("/tournament", "layout");
     revalidatePath("/refer");
   }, "Free slot used. Your slot is confirmed.");
+}
+
+/** Leave a team roster a captain put me on (security review 2026-10-10). */
+export async function leaveRosterAction(input: { matchId: string }) {
+  return runAction(async () => {
+    await leaveRoster(await requireUser(), input);
+    refresh(input.matchId);
+  }, "You left the roster.");
 }

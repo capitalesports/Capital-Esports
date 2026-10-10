@@ -8,6 +8,8 @@ import { parseInput } from "@/server/validation";
 import {
   normalizeReferralCode,
   periodStart,
+  FREE_SLOT_MAX_FEE_PAISE,
+  REFERRAL_MIN_QUALIFYING_FEE_PAISE,
   referralRewards,
   REFERRAL_CLAIM_WINDOW_HOURS,
   REFERRAL_PERIODS,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/referral";
 import { assertAdmin, assertUser, type Actor } from "@/lib/roles";
 import { notify, type NotificationEvent } from "./notify";
+import { csvCell } from "./seasons";
 
 /** A booked slot: the registration holds (or held) a confirmed place. */
 const BOOKED = ["CONFIRMED", "NO_SHOW"] as const;
@@ -142,7 +145,19 @@ async function referredActivity(where: Prisma.UserWhereInput, since: Date | null
 export async function referralRewardsFor(reader: Tx | typeof db, userId: string) {
   const [paidPlayers, used] = await Promise.all([
     reader.user.count({
-      where: { referredById: userId, deletedAt: null, payments: { some: { status: "PAID" } } },
+      where: {
+        referredById: userId,
+        deletedAt: null,
+        bannedAt: null,
+        // Counted once the match was actually played: entries refunded by a cancelled match never earn.
+        payments: {
+          some: {
+            status: "PAID",
+            amountPaise: { gte: REFERRAL_MIN_QUALIFYING_FEE_PAISE },
+            match: { status: { in: ["LIVE", "RESULTS_PENDING", "COMPLETED"] } },
+          },
+        },
+      },
     }),
     reader.referralCreditUse.count({
       where: { userId, registration: { status: { not: "CANCELLED" } } },
@@ -165,7 +180,9 @@ export async function redeemReferralCredit(actor: Actor | null, input: unknown, 
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"refcredit:" + me.id}))`;
     const reg = await tx.registration.findUnique({
       where: { matchId_userId: { matchId, userId: me.id } },
-      include: { match: { select: { entryFeePaise: true } } },
+      include: {
+        match: { select: { entryFeePaise: true, status: true, registrationClosesAt: true } },
+      },
     });
     if (!reg || reg.status !== "PENDING_PAYMENT")
       throw new AppError("NOT_FOUND", "There is no payment waiting for you in this match.");
@@ -178,6 +195,15 @@ export async function redeemReferralCredit(actor: Actor | null, input: unknown, 
         "CONFLICT",
         "The payment window has expired. Register again if slots are left.",
       );
+    if (reg.match.status !== "REGISTRATION_OPEN" || now >= reg.match.registrationClosesAt) {
+      throw new AppError("CONFLICT", "Registration for this match has closed.");
+    }
+    if (reg.match.entryFeePaise > FREE_SLOT_MAX_FEE_PAISE) {
+      throw new AppError(
+        "CONFLICT",
+        `Free slots cover entries up to ₹${FREE_SLOT_MAX_FEE_PAISE / 100}. Please pay for this one.`,
+      );
+    }
     const rewards = await referralRewardsFor(tx, me.id);
     if (rewards.available < 1) throw new AppError("CONFLICT", "You have no free slots yet.");
     await tx.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
@@ -284,11 +310,6 @@ export async function getReferrerDetail(actor: Actor | null, input: unknown) {
       payments: payments.filter((x) => x.userId === p.userId),
     })),
   };
-}
-
-function csvCell(v: string | number | null): string {
-  const s = v === null ? "" : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 /** CSV of the admin report (one line per referred player, with the referrer's details). */

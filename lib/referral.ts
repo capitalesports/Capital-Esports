@@ -110,6 +110,10 @@ export function periodStart(period: ReferralPeriod, now = new Date()): Date | nu
 
 /** Reward (DECISIONS M52): every 5 referred players who book a paid slot earn 1 free slot. */
 export const REFERRALS_PER_FREE_SLOT = 5;
+/** A referred player's paid slot counts only from this entry fee (no ₹1 entries to farm rewards). */
+export const REFERRAL_MIN_QUALIFYING_FEE_PAISE = 5_000;
+/** A free slot covers entries up to this fee. */
+export const FREE_SLOT_MAX_FEE_PAISE = 10_000;
 
 export interface ReferralRewards {
   /** Free slots earned so far. */

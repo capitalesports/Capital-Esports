@@ -20,12 +20,16 @@ export async function catchUpMatchStatuses(now = Date.now()): Promise<void> {
   running = (async () => {
     try {
       // Loaded on use: the jobs import services that import these queries (no import cycle).
-      const [{ runMatchStatusJob }, { runReminderJob }] = await Promise.all([
-        import("./match-status-job"),
-        import("./reminder-job"),
-      ]);
+      const [{ runMatchStatusJob }, { runReminderJob }, { runPaymentExpiryJob }] =
+        await Promise.all([
+          import("./match-status-job"),
+          import("./reminder-job"),
+          import("./payment-jobs"),
+        ]);
       await runMatchStatusJob(new Date(now));
       await runReminderJob(new Date(now));
+      // Unpaid entries lose their slot after the 10-minute window (the daily cron alone is too slow).
+      await runPaymentExpiryJob(new Date(now));
     } catch (e) {
       console.error("[status catch-up] failed", e);
     } finally {

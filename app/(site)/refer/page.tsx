@@ -6,7 +6,12 @@ import { ShareReferral } from "@/components/referral/share-referral";
 import { requirePageUser } from "@/server/auth/guards";
 import { toActor } from "@/server/auth/session";
 import { getMyReferrals } from "@/server/services/referrals";
-import { referralPath, REFERRALS_PER_FREE_SLOT } from "@/lib/referral";
+import {
+  FREE_SLOT_MAX_FEE_PAISE,
+  REFERRAL_MIN_QUALIFYING_FEE_PAISE,
+  referralPath,
+  REFERRALS_PER_FREE_SLOT,
+} from "@/lib/referral";
 import { siteUrl } from "@/lib/site";
 import { formatDateIST } from "@/lib/time";
 
@@ -39,6 +44,11 @@ export default async function ReferPage() {
           When {REFERRALS_PER_FREE_SLOT} players who joined with your code each book a{" "}
           <strong>paid</strong> slot, you get <strong>1 free slot</strong> for any paid scrim or
           tournament. Every {REFERRALS_PER_FREE_SLOT} more earns another.
+        </p>
+        <p className="text-muted-foreground text-xs">
+          A paid slot counts from ₹{REFERRAL_MIN_QUALIFYING_FEE_PAISE / 100} entry. A free slot
+          covers entries up to ₹{FREE_SLOT_MAX_FEE_PAISE / 100}. Fake or duplicate accounts are
+          removed and their rewards cancelled.
         </p>
         <div>
           <div className="mb-1 flex justify-between text-xs">

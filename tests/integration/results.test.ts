@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Player result submission is switched off on the site (M48), but the code stays: test it switched on.
+vi.mock("@/lib/results-config", () => ({ PLAYERS_SUBMIT_RESULTS: true }));
 import { loginWithVerifiedPhone } from "@/server/services/auth";
 import { getStandingsPage } from "@/server/services/leaderboard";
 import { registerForMatch } from "@/server/services/registration";
@@ -194,7 +197,10 @@ describe("moderation, approval and reversal", () => {
 
   it("tells only the prize winner they won and that it is paid within 2 working days (DECISIONS M28)", async () => {
     const { m, players } = await pendingMatch(2);
-    await testDb().match.update({ where: { id: m.id }, data: { prizePaise: 45_400, title: "Prize Rush" } });
+    await testDb().match.update({
+      where: { id: m.id },
+      data: { prizePaise: 45_400, title: "Prize Rush" },
+    });
     const [a, b] = players;
     await submitResult(player(a!), { matchId: m.id, placement: 1, kills: 4 }, PNG);
     await submitResult(player(b!), { matchId: m.id, placement: 2, kills: 2 }, PNG);

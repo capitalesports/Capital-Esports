@@ -25,7 +25,8 @@ beforeEach(async () => {
 
 /** A confirmed registration, paid when `paise` > 0. */
 async function slot(userId: string, paise = 0) {
-  const m = await createMatch(admin.id, { entryFeePaise: paise });
+  // A played match: paid entries count for rewards only once the match has been played.
+  const m = await createMatch(admin.id, { entryFeePaise: paise, status: "COMPLETED" });
   const r = await testDb().registration.create({
     data: { matchId: m.id, userId, status: "CONFIRMED", position: 1 },
   });
@@ -128,7 +129,7 @@ describe("referral tracking", () => {
     expect(csv.split("\n")[0]).toBe(
       "referrer,referrer_code,player,joined_at,slots_booked,paid_slots,paid_rupees,last_paid_at",
     );
-    expect(csv).toContain(",2,140.00,");
+    expect(csv).toContain(`"2","140.00"`);
   });
 
   it("reports are admin-only and the player page needs a login", async () => {
@@ -237,5 +238,30 @@ describe("referral reward: 5 paid referred players = 1 free slot (M52)", () => {
     await expect(redeemReferralCredit(actor(p), { matchId: "x" })).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
+  });
+});
+
+describe("referral reward abuse limits (security review)", () => {
+  it("entries below the minimum fee do not earn a free slot", async () => {
+    const k = await createPlayer();
+    const code = await getOrCreateReferralCode(k.id);
+    for (let i = 0; i < 5; i++) {
+      const u = await createPlayer();
+      await claimReferral(u.id, code);
+      await slot(u.id, 1000); // a Rs 10 entry: below the Rs 50 minimum
+    }
+    expect((await referralRewardsFor(testDb(), k.id)).available).toBe(0);
+  });
+
+  it("paid entries in matches not played yet do not count", async () => {
+    const k = await createPlayer();
+    const code = await getOrCreateReferralCode(k.id);
+    for (let i = 0; i < 5; i++) {
+      const u = await createPlayer();
+      await claimReferral(u.id, code);
+      const m = await slot(u.id, 7000);
+      await testDb().match.update({ where: { id: m.id }, data: { status: "REGISTRATION_OPEN" } });
+    }
+    expect((await referralRewardsFor(testDb(), k.id)).available).toBe(0);
   });
 });

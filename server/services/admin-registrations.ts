@@ -6,7 +6,7 @@ import { db, type Tx } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { parseInput } from "@/server/validation";
 import { isEditable, type MatchStatus } from "@/lib/match-state";
-import { assertModerator, type Actor } from "@/lib/roles";
+import { assertCanManageMatch, assertModerator, type Actor } from "@/lib/roles";
 import { notify, type NotificationEvent } from "./notify";
 import { enterPendingPayment, executeRefunds, markRefund } from "./payments";
 import { lockMatch, promoteWaitlist, SLOT_HOLDING } from "./registration";
@@ -158,6 +158,15 @@ export async function adminRemoveRegistration(actor: Actor | null, input: unknow
   const dropped = await db.$transaction(async (tx) => {
     const { matchId } = await loadRegistration(tx, registrationId);
     const match = await lockMatch(tx, matchId);
+    assertCanManageMatch(actor, match);
+    // Once lobbies or the bracket are drawn from a sign-up list, removing an entry there would leave
+    // its copies playing (or reshuffle the bracket): handle it in the lobby/bracket match instead.
+    if (match.isEntryList && match.status !== "REGISTRATION_OPEN" && match.status !== "UPCOMING") {
+      throw new AppError(
+        "CONFLICT",
+        "Registration has closed and lobbies/bracket are drawn. Remove the entry from its match instead.",
+      );
+    }
     const reg = await loadRegistration(tx, registrationId);
     if (!ACTIVE_REGISTRATION.includes(reg.status))
       throw new AppError("CONFLICT", "This entry is already cancelled.");
@@ -194,6 +203,7 @@ export async function adminPromoteRegistration(actor: Actor | null, input: unkno
   const result = await db.$transaction(async (tx) => {
     const { matchId } = await loadRegistration(tx, registrationId);
     const match = await lockMatch(tx, matchId);
+    assertCanManageMatch(actor, match);
     const reg = await loadRegistration(tx, registrationId);
     if (reg.status !== "WAITLISTED")
       throw new AppError("CONFLICT", "Only waitlisted entries can be promoted.");
@@ -218,7 +228,11 @@ export async function adminPromoteRegistration(actor: Actor | null, input: unkno
       before: { status: reg.status, matchId },
       after: { status },
     });
-    return { matchId, status, players: [reg.userId, ...roster.flatMap((r) => (r.userId ? [r.userId] : []))] };
+    return {
+      matchId,
+      status,
+      players: [reg.userId, ...roster.flatMap((r) => (r.userId ? [r.userId] : []))],
+    };
   });
   await notify({ type: "WAITLIST_PROMOTED", userIds: result.players, matchId: result.matchId });
   return result.status;

@@ -1,11 +1,6 @@
 import "server-only";
 import { Cashfree, CFEnvironment } from "cashfree-pg";
-import {
-  cashfreeEnv,
-  cashfreePgConfig,
-  isProductionDeployment,
-  razorpayConfig,
-} from "@/server/env";
+import { cashfreeEnv, cashfreePgConfig, stubsForbidden, razorpayConfig } from "@/server/env";
 import { AppError } from "@/server/errors";
 import { paiseToRupees } from "@/lib/payments";
 
@@ -297,7 +292,7 @@ export function getPaymentGateway(): PaymentGateway {
   if (rzp) return new RazorpayPaymentGateway(rzp);
   const cfg = cashfreePgConfig();
   if (cfg) return new CashfreePaymentGateway(cfg);
-  if (isProductionDeployment()) throw new AppError("UNAVAILABLE", "Payments are not configured.");
+  if (stubsForbidden()) throw new AppError("UNAVAILABLE", "Payments are not configured.");
   return new StubPaymentGateway();
 }
 

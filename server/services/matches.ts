@@ -23,7 +23,7 @@ import {
   MATCH_STATUSES,
   type MatchStatus,
 } from "@/lib/match-state";
-import { assertAdmin, assertModerator, type Actor } from "@/lib/roles";
+import { assertAdmin, assertCanManageMatch, assertModerator, type Actor } from "@/lib/roles";
 import { roomNeedsPassword } from "@/lib/room-rules";
 import { addDays } from "@/lib/time";
 import { isOpenEntry } from "@/lib/lobbies";
@@ -75,8 +75,12 @@ function snapshot<T extends { roomId?: string | null; roomPassword?: string | nu
 }
 
 export async function createMatch(actor: Actor | null, input: unknown) {
-  const me = assertModerator(actor);
+  assertModerator(actor);
   const data = parseInput(matchFormSchema, input);
+  const me = assertCanManageMatch(actor, {
+    isEntryList: false,
+    tournamentId: data.tournamentId ?? null,
+  });
   return db.$transaction(async (tx) => {
     await assertTournamentLink(tx, data);
     const match = await tx.match.create({
@@ -94,10 +98,14 @@ export async function createMatch(actor: Actor | null, input: unknown) {
 }
 
 export async function updateMatch(actor: Actor | null, matchId: string, input: unknown) {
-  const me = assertModerator(actor);
+  assertModerator(actor);
   const data = parseInput(matchFormSchema, input);
   return db.$transaction(async (tx) => {
     const before = await loadMatch(tx, matchId);
+    const me = assertCanManageMatch(actor, {
+      isEntryList: before.isEntryList,
+      tournamentId: before.tournamentId ?? data.tournamentId ?? null,
+    });
     if (!isEditable(before.status)) {
       throw new AppError("CONFLICT", "Only matches that have not started can be edited.");
     }
@@ -225,10 +233,11 @@ const transitionSchema = z.object({
 });
 
 export async function transitionMatchStatus(actor: Actor | null, input: unknown) {
-  const me = assertModerator(actor);
+  assertModerator(actor);
   const { matchId, to } = parseInput(transitionSchema, input);
   const { from, split } = await db.$transaction(async (tx) => {
     const match = await loadMatch(tx, matchId);
+    const me = assertCanManageMatch(actor, match);
     if (match.isEntryList && to !== "REGISTRATION_OPEN" && to !== "REGISTRATION_CLOSED") {
       throw new AppError(
         "CONFLICT",
@@ -431,10 +440,11 @@ export async function deleteMatch(actor: Actor | null, input: unknown) {
 
 /** Cancel with a reason: registrations are cancelled and any paid entries are queued for refund. */
 export async function cancelMatch(actor: Actor | null, input: unknown) {
-  const me = assertModerator(actor);
+  assertModerator(actor);
   const { matchId, reason } = parseInput(cancelSchema, input);
   const result = await db.$transaction(async (tx) => {
     const match = await loadMatch(tx, matchId);
+    const me = assertCanManageMatch(actor, match);
     return cancelMatchInTx(tx, match, reason, { actorId: me.id, action: "match.cancel" });
   });
   await finishCancellation(result);

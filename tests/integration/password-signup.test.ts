@@ -33,17 +33,24 @@ describe("email + password sign-up", () => {
     expect(pending).toMatchObject({ displayName: "Rohan", emailVerifiedAt: null, phone: null });
     expect(pending.passwordHash).toMatch(/^scrypt\$/);
 
-    const out = await confirmPasswordSignup({ email: "rohan@example.in", code: lastCode("rohan@example.in") });
+    const out = await confirmPasswordSignup({
+      email: "rohan@example.in",
+      code: lastCode("rohan@example.in"),
+    });
     expect(out).toEqual({ id: pending.id, profileComplete: true });
     const audit = await testDb().auditLog.findFirst({ where: { action: "user.signup.password" } });
     expect(audit?.entityId).toBe(pending.id);
     // The new player can now log in with the password.
-    expect((await loginWithPassword({ email: "rohan@example.in", password: "secret-pass-1" }, IP)).id).toBe(pending.id);
+    expect(
+      (await loginWithPassword({ email: "rohan@example.in", password: "secret-pass-1" }, IP)).id,
+    ).toBe(pending.id);
   });
 
   it("can't log in with the password before the email code is entered", async () => {
     await startPasswordSignup(form(), IP);
-    await expect(loginWithPassword({ email: "rohan@example.in", password: "secret-pass-1" }, IP)).rejects.toMatchObject({
+    await expect(
+      loginWithPassword({ email: "rohan@example.in", password: "secret-pass-1" }, IP),
+    ).rejects.toMatchObject({
       message: "Wrong email or password.",
     });
   });
@@ -57,42 +64,73 @@ describe("email + password sign-up", () => {
       { dateOfBirth: "11/11/2004" },
       { password: "short" },
     ]) {
-      await expect(startPasswordSignup(form(bad), IP)).rejects.toMatchObject({ code: "VALIDATION" });
+      await expect(startPasswordSignup(form(bad), IP)).rejects.toMatchObject({
+        code: "VALIDATION",
+      });
     }
-    await expect(confirmPasswordSignup({ email: "rohan@example.in", code: "12" })).rejects.toMatchObject({
+    await expect(
+      confirmPasswordSignup({ email: "rohan@example.in", code: "12" }),
+    ).rejects.toMatchObject({
       code: "VALIDATION",
     });
   });
 
   it("refuses an email that already belongs to a real account", async () => {
     await createUser({ email: "taken@example.in" });
-    await expect(startPasswordSignup(form({ email: "taken@example.in" }), IP)).rejects.toMatchObject({
+    await expect(
+      startPasswordSignup(form({ email: "taken@example.in" }), IP),
+    ).rejects.toMatchObject({
       code: "CONFLICT",
     });
   });
 
-  it("lets a second attempt replace an unfinished one, and only the latest code works", async () => {
+  it("while a code is out, only the same person (same password) can resend; a stranger cannot take over", async () => {
     await startPasswordSignup(form(), IP);
     const first = lastCode("rohan@example.in");
-    await startPasswordSignup(form({ displayName: "Rohan K", password: "another-pass-2" }), "9.9.9.8");
+    // Someone else, with another password, can't replace the pending sign-up (security review).
+    await expect(
+      startPasswordSignup(
+        form({ displayName: "Attacker", password: "attacker-pass-9" }),
+        "9.9.9.8",
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    // "Resend code" from the same form (same password) sends a fresh code and keeps the details.
+    await startPasswordSignup(form(), IP);
     const second = lastCode("rohan@example.in");
     expect(await testDb().user.count({ where: { email: "rohan@example.in" } })).toBe(1);
     if (first !== second) {
-      await expect(confirmPasswordSignup({ email: "rohan@example.in", code: first })).rejects.toMatchObject({
+      await expect(
+        confirmPasswordSignup({ email: "rohan@example.in", code: first }),
+      ).rejects.toMatchObject({
         code: "VALIDATION",
       });
     }
     await confirmPasswordSignup({ email: "rohan@example.in", code: second });
     const user = await testDb().user.findUniqueOrThrow({ where: { email: "rohan@example.in" } });
-    expect(user.displayName).toBe("Rohan K");
-    expect((await loginWithPassword({ email: "rohan@example.in", password: "another-pass-2" }, IP)).id).toBe(user.id);
+    expect(user.displayName).not.toBe("Attacker");
+  });
+
+  it("an expired pending sign-up can be replaced", async () => {
+    await startPasswordSignup(form(), IP);
+    await testDb().emailCode.updateMany({ data: { expiresAt: new Date(Date.now() - 60_000) } });
+    await startPasswordSignup(
+      form({ displayName: "Rohan K", password: "another-pass-2" }),
+      "9.9.9.8",
+    );
+    await confirmPasswordSignup({ email: "rohan@example.in", code: lastCode("rohan@example.in") });
+    const user = await testDb().user.findUniqueOrThrow({ where: { email: "rohan@example.in" } });
+    expect(
+      (await loginWithPassword({ email: "rohan@example.in", password: "another-pass-2" }, IP)).id,
+    ).toBe(user.id);
   });
 
   it("rejects a wrong code and a finished sign-up's email", async () => {
     await startPasswordSignup(form(), IP);
     const code = lastCode("rohan@example.in");
     const wrong = code === "000000" ? "111111" : "000000";
-    await expect(confirmPasswordSignup({ email: "rohan@example.in", code: wrong })).rejects.toMatchObject({
+    await expect(
+      confirmPasswordSignup({ email: "rohan@example.in", code: wrong }),
+    ).rejects.toMatchObject({
       code: "VALIDATION",
     });
     await confirmPasswordSignup({ email: "rohan@example.in", code });
@@ -111,7 +149,9 @@ describe("email + password sign-up", () => {
 
   it("an unproven sign-up can't keep the email from its Google owner", async () => {
     await startPasswordSignup(form(), IP);
-    const squatter = await testDb().user.findUniqueOrThrow({ where: { email: "rohan@example.in" } });
+    const squatter = await testDb().user.findUniqueOrThrow({
+      where: { email: "rohan@example.in" },
+    });
     const out = await loginWithGoogle({
       sub: "google-rohan",
       email: "rohan@example.in",
@@ -122,6 +162,8 @@ describe("email + password sign-up", () => {
     const owner = await testDb().user.findUniqueOrThrow({ where: { id: out.id } });
     expect(owner.email).toBe("rohan@example.in");
     expect(owner.emailVerifiedAt).not.toBeNull();
-    expect((await testDb().user.findUniqueOrThrow({ where: { id: squatter.id } })).email).toBeNull();
+    expect(
+      (await testDb().user.findUniqueOrThrow({ where: { id: squatter.id } })).email,
+    ).toBeNull();
   });
 });
