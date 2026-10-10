@@ -19,6 +19,7 @@ import {
 import { PaymentQrBox } from "@/components/admin/payment-qr-box";
 import { DeleteTournamentButton } from "@/components/admin/delete-tournament-button";
 import { TeamCodesPanel } from "@/components/admin/team-codes-panel";
+import { reopenBlocker } from "@/server/services/tournament-reopen";
 import { listTournamentRooms } from "@/server/queries/tournament-rooms";
 import { roomNeedsPassword } from "@/lib/room-rules";
 import { RegistrationWindowBox } from "@/components/admin/registration-window-box";
@@ -118,6 +119,9 @@ export default async function AdminTournamentPage({
               opensLabel={entry.registrationOpensAt ? formatIST(entry.registrationOpensAt) : null}
               closesLabel={formatIST(entry.registrationClosesAt)}
               startsLabel={formatIST(t.startsAt)}
+              reopenBlocker={
+                entry.status === "REGISTRATION_CLOSED" ? await reopenBlocker(db, t.id) : null
+              }
             />
           ) : null}
           {entry && !cancelled ? (

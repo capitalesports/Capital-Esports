@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClockIcon } from "lucide-react";
-import { setRegistrationWindowAction } from "@/app/admin/tournaments/actions";
+import {
+  reopenRegistrationAction,
+  setRegistrationWindowAction,
+} from "@/app/admin/tournaments/actions";
 import { IstDateTimePicker } from "@/components/admin/ist-date-time-picker";
 import { FormField } from "@/components/common/form-field";
 import { useAction } from "@/components/common/use-action";
@@ -21,6 +24,7 @@ export function RegistrationWindowBox({
   opensLabel,
   closesLabel,
   startsLabel,
+  reopenBlocker,
 }: {
   tournamentId: string;
   /** The sign-up list's status. */
@@ -31,6 +35,8 @@ export function RegistrationWindowBox({
   opensLabel: string | null;
   closesLabel: string;
   startsLabel: string;
+  /** Closed: why it can't be reopened (null = it can). */
+  reopenBlocker: string | null;
 }) {
   const router = useRouter();
   const [opens, setOpens] = useState(opensAt);
@@ -62,9 +68,7 @@ export function RegistrationWindowBox({
         </span>
       </p>
       {closed ? (
-        <p className="text-muted-foreground text-sm">
-          Registration has closed; lobbies or the bracket are drawn.
-        </p>
+        <ReopenForm tournamentId={tournamentId} blocker={reopenBlocker} />
       ) : (
         <form
           className="space-y-3"
@@ -111,5 +115,51 @@ export function RegistrationWindowBox({
         </form>
       )}
     </section>
+  );
+}
+
+/** Closed by mistake: open it again until a new closing time (DECISIONS M61). */
+function ReopenForm({ tournamentId, blocker }: { tournamentId: string; blocker: string | null }) {
+  const router = useRouter();
+  const [closes, setCloses] = useState("");
+  const { run, pending, fieldErrors } = useAction(reopenRegistrationAction);
+  if (blocker) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Registration has closed; lobbies or the bracket are drawn. {blocker}
+      </p>
+    );
+  }
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        const r = await run({ tournamentId, closesAt: closes });
+        if (r.ok) router.refresh();
+      }}
+    >
+      <p className="text-muted-foreground text-sm">
+        Closed by mistake? Open it again: the drawn bracket or lobbies (and any codes sent to them)
+        are removed and drawn again at the new closing time. Every sign-up stays.
+      </p>
+      <FormField
+        id="rw-reopen"
+        label="New closing time (IST)"
+        help="Must be before the tournament starts"
+        errors={fieldErrors.closesAt}
+      >
+        <IstDateTimePicker
+          id="rw-reopen"
+          label="New closing time"
+          value={closes}
+          invalid={!!fieldErrors.closesAt}
+          onChange={setCloses}
+        />
+      </FormField>
+      <Button type="submit" disabled={pending || !closes}>
+        Reopen registration
+      </Button>
+    </form>
   );
 }

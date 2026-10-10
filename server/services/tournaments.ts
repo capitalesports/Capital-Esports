@@ -105,7 +105,7 @@ export const tournamentFormSchema = z
  * Registration window rules (DECISIONS M57): it closes after it opens, in the future, and no later
  * than the tournament start (lobbies or the bracket are drawn when it closes).
  */
-function registrationWindowIssues(
+export function registrationWindowIssues(
   opens: Date | null,
   closes: Date,
   startsAt: Date,

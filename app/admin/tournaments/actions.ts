@@ -14,6 +14,7 @@ import {
   updateTournament,
 } from "@/server/services/tournaments";
 import { deleteTournament } from "@/server/services/tournament-delete";
+import { reopenRegistration } from "@/server/services/tournament-reopen";
 
 function refresh(id?: string) {
   revalidatePath("/admin/tournaments");
@@ -53,6 +54,14 @@ export async function cancelTournamentAction(input: { tournamentId: string; reas
     revalidatePath("/scrims");
     return r;
   }, "Tournament cancelled; entries are being refunded");
+}
+
+export async function reopenRegistrationAction(input: { tournamentId: string; closesAt: string }) {
+  return runAction(async () => {
+    const r = await reopenRegistration(await requireAdmin(), input);
+    refresh(input.tournamentId);
+    return r;
+  }, "Registration reopened");
 }
 
 export async function deleteTournamentAction(input: { tournamentId: string }) {

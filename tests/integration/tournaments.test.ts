@@ -4,6 +4,7 @@ import { listRegisteredTeams, listTeamRegistrationEvents } from "@/server/servic
 import { registerForMatch } from "@/server/services/registration";
 import { deleteTournament } from "@/server/services/tournament-delete";
 import { setRoomCredentials } from "@/server/services/matches";
+import { reopenRegistration } from "@/server/services/tournament-reopen";
 import { approveResults, reopenResults, saveResultRows } from "@/server/services/results";
 import {
   getCurrentTournaments,
@@ -1045,5 +1046,94 @@ describe("team codes per matchup (DECISIONS M60)", () => {
     );
     expect(m1!.roomId).toBe("VALO-1");
     expect(m2!.roomId).toBeNull();
+  });
+});
+
+describe("reopening registration closed by mistake (DECISIONS M61)", () => {
+  async function teams(entryMatchId: string, n: number) {
+    for (let i = 0; i < n; i++) {
+      const a = await createPlayer("VALORANT");
+      const b = await createPlayer("VALORANT");
+      const g = await testDb().gameProfile.findFirstOrThrow({ where: { userId: b.id } });
+      await registerForMatch(
+        { id: a.id, role: "PLAYER" },
+        {
+          matchId: entryMatchId,
+          teamName: `Reopen ${i}`,
+          players: [{ gameId: g.gameId, ign: g.ign }],
+        },
+      );
+    }
+  }
+
+  it("undoes the drawn bracket, keeps the sign-ups and opens until the new time", async () => {
+    const t = await createTournament(admin, {
+      game: "VALORANT",
+      mode: "TWO_V_TWO",
+      title: "Reopen Cup",
+      startsAt: inDays(3),
+      prizePool: "0",
+    });
+    await teams(t.entryMatchId!, 3);
+    const round1 = await generateBracket(admin, {
+      tournamentId: t.id,
+      firstRoundStartsAt: inDays(3),
+    });
+    await setRoomCredentials(admin, { matchId: round1[0]!.id, roomId: "OLD" });
+
+    await expect(
+      reopenRegistration(mod, { tournamentId: t.id, closesAt: inDays(2) }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      reopenRegistration(admin, { tournamentId: t.id, closesAt: inDays(4) }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+
+    expect(await reopenRegistration(admin, { tournamentId: t.id, closesAt: inDays(2) })).toEqual({
+      removedGames: 1,
+      resetRounds: 0,
+    });
+    const entry = await testDb().match.findUniqueOrThrow({ where: { id: t.entryMatchId! } });
+    expect(entry.status).toBe("REGISTRATION_OPEN");
+    expect(utcToIstInput(entry.registrationClosesAt)).toBe(inDays(2));
+    expect(
+      await testDb().registration.count({ where: { matchId: entry.id, status: "CONFIRMED" } }),
+    ).toBe(3);
+    expect(
+      await testDb().match.count({ where: { tournamentId: t.id, bracketRound: { not: null } } }),
+    ).toBe(0);
+    // A 4th team can sign up again.
+    await teams(t.entryMatchId!, 1);
+    expect(
+      await testDb().auditLog.count({ where: { action: "tournament.reopenRegistration" } }),
+    ).toBe(1);
+  });
+
+  it("undoes a lobby split, and refuses once a game has started", async () => {
+    const t = await createTournament(admin, {
+      game: "FREE_FIRE",
+      mode: "SOLO",
+      title: "Reopen Solo",
+      startsAt: inDays(3),
+      prizePool: "0",
+    });
+    for (let i = 0; i < 3; i++) {
+      const p = await createPlayer("FREE_FIRE");
+      await registerForMatch({ id: p.id, role: "PLAYER" }, { matchId: t.entryMatchId! });
+    }
+    await lockEntries(admin, { tournamentId: t.id });
+    const round = await testDb().match.findFirstOrThrow({
+      where: { tournamentId: t.id, isEntryList: false, parentMatchId: null },
+    });
+    expect(round.lobbyNumber).toBe(1);
+    await reopenRegistration(admin, { tournamentId: t.id, closesAt: inDays(2) });
+    const after = await testDb().match.findUniqueOrThrow({ where: { id: round.id } });
+    expect(after.lobbyNumber).toBeNull();
+    expect(await testDb().registration.count({ where: { matchId: round.id } })).toBe(0);
+
+    await lockEntries(admin, { tournamentId: t.id });
+    await testDb().match.update({ where: { id: round.id }, data: { status: "LIVE" } });
+    await expect(
+      reopenRegistration(admin, { tournamentId: t.id, closesAt: inDays(2) }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 });

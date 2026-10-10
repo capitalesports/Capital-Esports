@@ -755,3 +755,8 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 - Next bracket rounds appear in the panel automatically once results are approved, so codes go out round by round.
 - Dashboard: a bracket with more than 8 first-round matches is not drawn inline (it made the page ~11,000px tall); the player sees their own match with its code and a "View full bracket" link.
 - `scripts/demo-h2h-codes.ts`: local-only demo (230 Valorant 2v2 teams, bracket drawn); `--remove` deletes it.
+
+## M61 — Admins can reopen a tournament's registration (2026-10-11)
+
+- If registration closed by mistake, the admin Registration box offers "Reopen registration" with a new closing time (in the future, before the start). `reopenRegistration` (admin only, audited) removes what closing created — bracket games, extra lobbies and Lobby 1's copied players and room code — keeps every sign-up, and sets the sign-up list back to REGISTRATION_OPEN. It is drawn again when it closes next time.
+- Only before any game has started (no game past REGISTRATION_CLOSED, no results), not when cancelled or after winners are published. REGISTRATION_CLOSED → REGISTRATION_OPEN is not in the normal state machine; this audited admin undo is the only path.
