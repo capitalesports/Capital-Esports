@@ -2,7 +2,9 @@ import { IconSprite } from "@/components/common/icon-sprite";
 import { PageViewBeacon } from "@/components/analytics/page-view-beacon";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
+import { NotifyPromptLoader } from "@/components/pwa/notify-prompt-loader";
 import { getCurrentUser } from "@/server/auth/session";
+import { vapidPublicKey } from "@/server/providers/notification-channels";
 import { getActiveSponsors, getSocialLinks } from "@/server/services/content";
 import { unreadCount } from "@/server/services/inbox";
 import { artworkSrc, artworkWebpFor } from "@/lib/artwork";
@@ -43,6 +45,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         partners={sponsors.map((s) => ({ id: s.id, name: s.name, logoUrl: s.logoUrl, url: s.url }))}
       />
       <PageViewBeacon />
+      {user && !user.pushOptIn ? <NotifyPromptLoader vapidPublicKey={vapidPublicKey()} /> : null}
     </div>
   );
 }

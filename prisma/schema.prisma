@@ -285,6 +285,8 @@ model Match {
   /// Set once the 30-minute reminder / room-credentials notice went out (reminder job dedupe).
   reminderSentAt       DateTime?
   roomNoticeSentAt     DateTime?
+  /// Set once the "registration open" alert went to every player (DECISIONS M64).
+  openNoticeSentAt     DateTime?
   tournamentId         String?
   createdById          String
   createdAt            DateTime    @default(now())
@@ -450,6 +452,8 @@ model Tournament {
   /// Published winners: [{ place, name, avatarUrl, prizePaise, userIds }]
   winners            Json?
   winnersPublishedAt DateTime?
+  /// Set once the "new tournament" alert went to every player (DECISIONS M64).
+  announcedAt        DateTime?
   /// Cancelled by an admin (every open match cancelled and refunded).
   cancelledAt        DateTime?
   cancelReason       String?

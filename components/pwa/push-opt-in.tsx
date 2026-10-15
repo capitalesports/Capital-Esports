@@ -5,12 +5,7 @@ import { BellRingIcon } from "lucide-react";
 import { disablePushAction, savePushSubscriptionAction } from "@/app/(site)/notifications/actions";
 import { useAction } from "@/components/common/use-action";
 import { Button } from "@/components/ui/button";
-
-function urlBase64ToUint8Array(base64: string) {
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const raw = atob((base64 + padding).replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-}
+import { pushSupported, subscribeToPush } from "./push-subscribe";
 
 type Support = "unknown" | "unsupported" | "denied" | "ready";
 
@@ -27,11 +22,7 @@ export function PushOptIn({
   const disable = useAction(disablePushAction);
 
   useEffect(() => {
-    const ok =
-      "serviceWorker" in navigator &&
-      "PushManager" in window &&
-      "Notification" in window &&
-      !!vapidPublicKey;
+    const ok = pushSupported(vapidPublicKey);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reads browser capabilities once after mount
     setSupport(!ok ? "unsupported" : Notification.permission === "denied" ? "denied" : "ready");
   }, [vapidPublicKey]);
@@ -39,18 +30,12 @@ export function PushOptIn({
   if (support === "unknown") return null;
 
   async function subscribe() {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      setSupport(permission === "denied" ? "denied" : "ready");
+    const r = await subscribeToPush(vapidPublicKey!);
+    if (!r.ok) {
+      setSupport(r.permission === "denied" ? "denied" : "ready");
       return;
     }
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey!),
-    });
-    const json = sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
-    await enable.run({ endpoint: json.endpoint, keys: json.keys });
+    await enable.run({ endpoint: r.endpoint, keys: r.keys });
   }
 
   return (

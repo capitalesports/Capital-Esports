@@ -38,6 +38,7 @@ const sessionUserSelect = {
   email: true,
   emailVerifiedAt: true,
   emailOptIn: true,
+  pushOptIn: true,
   gameProfiles: { select: { id: true, game: true, gameId: true, ign: true, region: true } },
 } as const;
 

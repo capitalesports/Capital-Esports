@@ -28,6 +28,9 @@ export async function catchUpMatchStatuses(now = Date.now()): Promise<void> {
         ]);
       await runMatchStatusJob(new Date(now));
       await runReminderJob(new Date(now));
+      // New scrim / tournament alerts to every player (M64).
+      const { runNewMatchAlerts } = await import("./new-match-alerts");
+      await runNewMatchAlerts(new Date(now));
       // Unpaid entries lose their slot after the 10-minute window (the daily cron alone is too slow).
       await runPaymentExpiryJob(new Date(now));
       // Manual UPI payments (M54): slots whose proof never came in time are released.

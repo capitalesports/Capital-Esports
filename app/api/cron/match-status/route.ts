@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkCronAuth } from "@/server/cron";
 import { runMatchStatusJob } from "@/server/jobs/match-status-job";
+import { runNewMatchAlerts } from "@/server/jobs/new-match-alerts";
 import { runReminderJob } from "@/server/jobs/reminder-job";
 
 export const maxDuration = 60;
@@ -11,10 +12,12 @@ export async function GET(request: Request) {
   if (denied) return denied;
   const transitions = await runMatchStatusJob();
   const reminders = await runReminderJob();
+  const alerts = await runNewMatchAlerts();
   return NextResponse.json({
     ok: true,
     transitions: transitions.length,
     details: transitions,
     ...reminders,
+    ...alerts,
   });
 }
