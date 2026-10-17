@@ -8,6 +8,8 @@ import {
   bracketShape,
   lobbyStandings,
   mondayOfIstWeek,
+  bracketSlots,
+  readyBracketPairs,
   walkBracket,
   type LobbyStanding,
 } from "@/lib/tournament";
@@ -154,6 +156,7 @@ export async function getTournamentMatches(tournamentId: string) {
   return matches.map((m) => ({
     ...m,
     sides: m.registrations.map((r) => ({
+      registrationId: r.id,
       name: r.team?.name ?? r.teamName ?? r.user.displayName ?? "Player",
       won: r.results[0]?.won ?? null,
       roundDiff: r.results[0]?.roundDiff ?? null,
@@ -162,6 +165,24 @@ export async function getTournamentMatches(tournamentId: string) {
 }
 
 export type TournamentMatch = Awaited<ReturnType<typeof getTournamentMatches>>[number];
+
+/**
+ * The viewer's own entries in a tournament's games (as the registrant or a confirmed teammate), so
+ * the bracket can highlight their team.
+ */
+export async function myTournamentEntryIds(
+  tournamentId: string,
+  userId: string,
+): Promise<string[]> {
+  const regs = await db.registration.findMany({
+    where: {
+      match: { tournamentId, isEntryList: false },
+      OR: [{ userId }, { members: { some: { userId, status: "CONFIRMED" } } }],
+    },
+    select: { id: true },
+  });
+  return regs.map((r) => r.id);
+}
 
 /** A bracket entrant: its team, or the solo player. */
 export function unitOf(r: { teamId: string | null; userId: string }): string {
@@ -206,8 +227,15 @@ export async function bracketState(reader: Reader, entryMatchId: string, tournam
   const names = new Map(
     entries.map((e) => [unitOf(e), e.team?.name ?? e.teamName ?? e.user.displayName ?? "Player"]),
   );
-  const rounds = walkBracket(entries.map(unitOf), (r, i) => winners.get(`${r}:${i}`) ?? null);
-  return { entrants: entries.length, names, rounds };
+  const winnerOf = (r: number, i: number) => winners.get(`${r}:${i}`) ?? null;
+  const rounds = walkBracket(entries.map(unitOf), winnerOf);
+  return {
+    entrants: entries.length,
+    names,
+    rounds,
+    ready: readyBracketPairs(entries.map(unitOf), winnerOf),
+    slots: bracketSlots(entries.map(unitOf), winnerOf),
+  };
 }
 
 export interface BracketViewRound {
@@ -215,6 +243,8 @@ export interface BracketViewRound {
   matches: (TournamentMatch | null)[];
   /** Who skips this round: a name, "TBD" while unknown, or null when nobody does. */
   bye: string | null;
+  /** Games not created yet: who already won through to each side (null = still playing). */
+  waiting: [string | null, string | null][];
 }
 
 /** Every round of the bracket, with a placeholder for each match not created yet. */
@@ -222,8 +252,10 @@ export function bracketRounds(
   state: Awaited<ReturnType<typeof bracketState>>,
   matches: TournamentMatch[],
 ): BracketViewRound[] {
+  const nameOf = (unit: string | null) => (unit ? (state.names.get(unit) ?? "Player") : null);
   return bracketShape(state.entrants).map((shape) => {
-    const known = state.rounds[shape.round - 1];
+    const slots = state.slots[shape.round - 1] ?? [];
+    const byeUnit = shape.byes ? (slots[slots.length - 1] ?? null) : null;
     return {
       round: shape.round,
       matches: Array.from(
@@ -231,7 +263,11 @@ export function bracketRounds(
         (_, index) =>
           matches.find((m) => m.bracketRound === shape.round && m.bracketIndex === index) ?? null,
       ),
-      bye: shape.byes ? (known?.bye ? (state.names.get(known.bye) ?? "Player") : "TBD") : null,
+      bye: shape.byes ? (nameOf(byeUnit) ?? "TBD") : null,
+      waiting: Array.from({ length: shape.matches }, (_, i) => [
+        nameOf(slots[2 * i] ?? null),
+        nameOf(slots[2 * i + 1] ?? null),
+      ]),
     };
   });
 }

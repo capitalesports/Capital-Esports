@@ -7,6 +7,8 @@ import {
   pairRound,
   pickByMode,
   pickTournament,
+  bracketSlots,
+  readyBracketPairs,
   walkBracket,
   lobbyStandings,
   mondayOfIstWeek,
@@ -197,5 +199,27 @@ describe("lobby points standings", () => {
       ["b", 2],
       ["c", 2],
     ]);
+  });
+});
+
+describe("bracket slots fill as soon as a game is decided (DECISIONS M66)", () => {
+  it("puts a winner in the next round straight away and readies a game once both sides are known", () => {
+    const teams = ["A", "B", "C", "D", "E"];
+    const won = new Map<string, string>([["1:0", "A"]]);
+    const winnerOf = (r: number, i: number) => won.get(`${r}:${i}`) ?? null;
+    // 5 teams: A-B, C-D, E has a bye and goes first in round 2.
+    expect(bracketSlots(teams, winnerOf)).toEqual([
+      ["A", "B", "C", "D", "E"],
+      ["E", "A", null],
+      [null, null],
+    ]);
+    expect(readyBracketPairs(teams, winnerOf).map((p) => `${p.round}:${p.index}`)).toEqual([
+      "1:0",
+      "1:1",
+      "2:0",
+    ]);
+    won.set("1:1", "D");
+    won.set("2:0", "E");
+    expect(bracketSlots(teams, winnerOf)[2]).toEqual(["D", "E"]);
   });
 });

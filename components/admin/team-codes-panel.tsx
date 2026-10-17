@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2Icon, KeyRoundIcon, SendIcon } from "lucide-react";
+import { CheckCircle2Icon, KeyRoundIcon, SendIcon, TrophyIcon } from "lucide-react";
 import { setRoomCredentialsAction } from "@/app/admin/matches/actions";
+import { PickWinnerButtons } from "@/components/admin/pick-winner";
 import { IntentLink as Link } from "@/components/common/intent-link";
 import { useAction } from "@/components/common/use-action";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,11 @@ export interface TeamCodeRow {
   sent: boolean;
   /** Finished or cancelled: no code needed any more. */
   done: boolean;
+  /** The entries in seat order, with the approved result once there is one. */
+  entries: { registrationId: string; name: string; won: boolean | null }[];
+  status: string;
+  /** A two-team bracket game: the admin picks the winner here (M65). */
+  bracket: boolean;
 }
 
 type Filter = "pending" | "sent" | "all";
@@ -31,9 +37,11 @@ const PAGE = 20;
  * the teams in that match see it on their dashboard and match page, and they get a notification.
  */
 export function TeamCodesPanel({
+  tournamentId,
   rows,
   needsPassword,
 }: {
+  tournamentId: string;
   rows: TeamCodeRow[];
   needsPassword: boolean;
 }) {
@@ -106,6 +114,7 @@ export function TeamCodesPanel({
             <TeamCodeItem
               key={r.id}
               row={r}
+              tournamentId={tournamentId}
               needsPassword={needsPassword}
               onSent={() => setSentHere((ids) => new Set(ids).add(r.id))}
             />
@@ -123,10 +132,12 @@ export function TeamCodesPanel({
 
 function TeamCodeItem({
   row,
+  tournamentId,
   needsPassword,
   onSent,
 }: {
   row: TeamCodeRow;
+  tournamentId: string;
   needsPassword: boolean;
   onSent: () => void;
 }) {
@@ -149,7 +160,18 @@ function TeamCodeItem({
       </div>
       {row.teams.length > 2 ? <p className="text-muted-foreground mt-1 text-xs">{vs}</p> : null}
       {row.done ? (
-        <p className="text-muted-foreground mt-2 text-sm">Match finished.</p>
+        <p className="text-muted-foreground mt-2 text-sm">
+          {row.entries.find((e) => e.won) ? (
+            <span className="text-success inline-flex items-center gap-1 font-semibold">
+              <TrophyIcon aria-hidden className="size-4" /> Winner:{" "}
+              {row.entries.find((e) => e.won)!.name} (moved to the next round)
+            </span>
+          ) : row.status === "RESULTS_PENDING" ? (
+            "Game over: pick the winner below."
+          ) : (
+            "Match finished."
+          )}
+        </p>
       ) : (
         <form
           className="mt-2 flex flex-wrap items-start gap-2"
@@ -194,6 +216,20 @@ function TeamCodeItem({
           ) : null}
         </form>
       )}
+      {row.bracket &&
+      row.entries.length === 2 &&
+      ["REGISTRATION_CLOSED", "LIVE", "RESULTS_PENDING"].includes(row.status) ? (
+        <WinnerButtons row={row} tournamentId={tournamentId} />
+      ) : null}
     </li>
+  );
+}
+
+function WinnerButtons({ row, tournamentId }: { row: TeamCodeRow; tournamentId: string }) {
+  return (
+    <div className="border-border mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+      <span className="text-muted-foreground text-sm">After the game, pick the winner:</span>
+      <PickWinnerButtons tournamentId={tournamentId} matchId={row.id} entries={row.entries} />
+    </div>
   );
 }

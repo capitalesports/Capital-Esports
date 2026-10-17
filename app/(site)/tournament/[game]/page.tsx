@@ -26,6 +26,7 @@ import {
   getCurrentTournaments,
   getTournamentLobbies,
   getTournamentMatches,
+  myTournamentEntryIds,
   lobbyStandingsFor,
 } from "@/server/services/tournament-queries";
 import { db } from "@/server/db";
@@ -112,6 +113,7 @@ export default async function GameTournamentPage({
     t.format === "BRACKET" && t.entryMatchId && matches.length
       ? await bracketState(db, t.entryMatchId, t.id)
       : null;
+  const mine = bracket && user ? await myTournamentEntryIds(t.id, user.id) : [];
   const winners = (t.winners as PublishedWinner[] | null) ?? null;
 
   return (
@@ -201,7 +203,11 @@ export default async function GameTournamentPage({
             </h2>
             {t.format === "BRACKET" ? (
               bracket ? (
-                <BracketView rounds={bracketRounds(bracket, matches)} linkBase="/scrims" />
+                <BracketView
+                  rounds={bracketRounds(bracket, matches)}
+                  mine={mine}
+                  linkBase="/scrims"
+                />
               ) : (
                 <p className="text-muted-foreground text-sm">
                   The bracket is drawn when sign-ups close.

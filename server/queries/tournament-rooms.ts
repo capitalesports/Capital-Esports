@@ -28,7 +28,9 @@ export async function listTournamentRooms(tournamentId: string) {
         where: { status: "CONFIRMED" },
         orderBy: { position: "asc" },
         select: {
+          id: true,
           teamName: true,
+          results: { where: { approvedAt: { not: null } }, select: { won: true } },
           team: { select: { name: true } },
           user: { select: { displayName: true } },
         },
@@ -46,5 +48,11 @@ export async function listTournamentRooms(tournamentId: string) {
     roomPassword: m.roomPassword,
     sentAt: m.roomNoticeSentAt,
     teams: m.registrations.map((r) => r.team?.name ?? r.teamName ?? r.user.displayName ?? "Player"),
+    entries: m.registrations.map((r) => ({
+      registrationId: r.id,
+      name: r.team?.name ?? r.teamName ?? r.user.displayName ?? "Player",
+      won: r.results[0]?.won ?? null,
+    })),
+    bracket: m.bracketRound !== null,
   }));
 }

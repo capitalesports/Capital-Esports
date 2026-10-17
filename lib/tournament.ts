@@ -161,6 +161,48 @@ export function walkBracket<K>(
   return rounds;
 }
 
+/**
+ * Who stands in each slot of every round so far (DECISIONS M66): round 1 is the sign-up order; a
+ * winner fills their next-round slot the moment their game is decided, even while the other side is
+ * still playing (null = not known yet). Same pairing as walkBracket: consecutive pairs; the last of
+ * an odd count has a bye and goes first in the next round.
+ */
+export function bracketSlots<K>(
+  entrants: K[],
+  winnerOf: (round: number, index: number) => K | null,
+): (K | null)[][] {
+  const rounds: (K | null)[][] = [];
+  let left: (K | null)[] = entrants;
+  for (let round = 1; left.length >= 2; round++) {
+    rounds.push(left);
+    const winners: (K | null)[] = [];
+    for (let i = 0; i + 1 < left.length; i += 2) {
+      const a = left[i] ?? null;
+      const b = left[i + 1] ?? null;
+      const w = a === null || b === null ? null : winnerOf(round, i / 2);
+      winners.push(w !== null && (w === a || w === b) ? w : null);
+    }
+    left = left.length % 2 ? [left[left.length - 1] ?? null, ...winners] : winners;
+  }
+  return rounds;
+}
+
+/** Every bracket game whose two sides are known: it can be created and played now (M66). */
+export function readyBracketPairs<K>(
+  entrants: K[],
+  winnerOf: (round: number, index: number) => K | null,
+): { round: number; index: number; pair: [K, K] }[] {
+  return bracketSlots(entrants, winnerOf).flatMap((slots, r) => {
+    const out: { round: number; index: number; pair: [K, K] }[] = [];
+    for (let i = 0; i + 1 < slots.length; i += 2) {
+      const a = slots[i] ?? null;
+      const b = slots[i + 1] ?? null;
+      if (a !== null && b !== null) out.push({ round: r + 1, index: i / 2, pair: [a, b] });
+    }
+    return out;
+  });
+}
+
 export interface RoundShape {
   round: number;
   matches: number;

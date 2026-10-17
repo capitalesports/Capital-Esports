@@ -25,7 +25,6 @@ import {
   bracketPodium,
   bracketShape,
   mondayOfIstWeek,
-  nextRoundEntrants,
   pairRound,
   roundName,
   type BracketMatchResult,
@@ -878,35 +877,55 @@ export async function advanceBracket(tx: Tx, matchId: string, actorId: string | 
   const t = await loadTournament(tx, match.tournamentId);
   if (t.format !== "BRACKET" || !t.entryMatchId) return null;
   const state = await bracketState(tx, t.entryMatchId, t.id);
-  const round = state.rounds[match.bracketRound - 1];
-  if (!round?.complete) return null;
-  const entrants = nextRoundEntrants(round.winners as string[], round.bye);
-  if (entrants.length < 2) return null; // the final is decided
-  const nextRound = round.round + 1;
-  if (await tx.match.count({ where: { tournamentId: t.id, bracketRound: nextRound } })) return null;
-  const latest = await tx.match.findFirstOrThrow({
-    where: { tournamentId: t.id, bracketRound: round.round },
-    orderBy: { startsAt: "desc" },
-    select: { startsAt: true },
+  const existing = await tx.match.findMany({
+    where: { tournamentId: t.id, bracketRound: { not: null } },
+    select: { bracketRound: true, bracketIndex: true, startsAt: true },
   });
+  const made = new Set(existing.map((m) => `${m.bracketRound}:${m.bracketIndex}`));
+  // Every later-round game whose two sides are now known (M66), not only once a round is complete.
+  const todo = state.ready.filter((p) => p.round > 1 && !made.has(`${p.round}:${p.index}`));
+  if (!todo.length) return null;
   const entries = await confirmedEntries(tx, t.entryMatchId);
-  const created = await createBracketRound(
-    tx,
-    t,
-    nextRound,
-    entrants,
-    entries,
-    addMinutes(latest.startsAt, NEXT_ROUND_GAP_MIN),
-    actorId ?? match.createdById,
-  );
+  const byUnit = new Map(entries.map((e) => [unitOf(e), e]));
+  const totalRounds = bracketShape(entries.length).length;
+  const created = [];
+  for (const p of todo) {
+    const before = existing.filter((m) => m.bracketRound === p.round - 1);
+    const latest = Math.max(...before.map((m) => m.startsAt.getTime()));
+    const startsAt = addMinutes(new Date(latest), NEXT_ROUND_GAP_MIN);
+    const m = await tx.match.create({
+      data: {
+        game: t.game,
+        kind: "TOURNAMENT",
+        mode: t.mode,
+        title: bracketTitle(t, p.round, p.index, totalRounds),
+        startsAt,
+        registrationClosesAt: addMinutes(startsAt, -CLOSE_OFFSET_MIN),
+        maxSlots: 2,
+        minSlots: 0,
+        status: "REGISTRATION_CLOSED",
+        tournamentId: t.id,
+        bracketRound: p.round,
+        bracketIndex: p.index,
+        streamUrl: t.streamUrl,
+        createdById: actorId ?? match.createdById,
+      },
+    });
+    for (const [side, unit] of p.pair.entries())
+      await copyEntry(tx, byUnit.get(unit)!, m.id, side + 1);
+    created.push(m);
+  }
   await writeAudit(tx, {
     actorId,
     action: "tournament.advance",
     entityType: "Tournament",
     entityId: t.id,
-    after: { round: nextRound, entrants, matchIds: created.map((c) => c.match.id) },
+    after: {
+      games: todo.map((p) => ({ round: p.round, index: p.index, entrants: p.pair })),
+      matchIds: created.map((c) => c.id),
+    },
   });
-  return created.map((c) => c.match);
+  return created;
 }
 
 /**
@@ -920,8 +939,22 @@ export async function rollbackBracketAdvance(tx: Tx, matchId: string) {
     select: { tournamentId: true, bracketRound: true },
   });
   if (!match.tournamentId || match.bracketRound === null) return null;
+  // Only the games this result fed (M66): later games holding this game's winner. Other games of
+  // the next round may already exist because their own sides were decided.
+  const winner = await tx.result.findFirst({
+    where: { matchId, won: true },
+    select: { registration: { select: { teamId: true, userId: true } } },
+  });
+  if (!winner) return null;
+  const unit = winner.registration.teamId ?? winner.registration.userId;
   const later = await tx.match.findMany({
-    where: { tournamentId: match.tournamentId, bracketRound: { gt: match.bracketRound } },
+    where: {
+      tournamentId: match.tournamentId,
+      bracketRound: { gt: match.bracketRound },
+      registrations: {
+        some: winner.registration.teamId ? { teamId: unit } : { userId: unit, teamId: null },
+      },
+    },
     select: { id: true, status: true },
   });
   if (!later.length) return null;

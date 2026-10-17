@@ -215,12 +215,16 @@ export default async function AdminTournamentPage({
       {rooms.length && !cancelled ? (
         <div className="mt-8">
           <TeamCodesPanel
+            tournamentId={t.id}
             needsPassword={roomNeedsPassword(t.game)}
             rows={rooms.map((r) => ({
               id: r.id,
               label: r.title,
               startsLabel: formatIST(r.startsAt),
               teams: r.teams,
+              entries: r.entries,
+              status: r.status,
+              bracket: r.bracket,
               roomId: r.roomId,
               roomPassword: r.roomPassword,
               sent: !!r.roomId,

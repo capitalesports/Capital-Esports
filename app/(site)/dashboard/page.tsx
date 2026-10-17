@@ -21,6 +21,7 @@ import {
   bracketRounds,
   bracketState,
   getTournamentMatches,
+  myTournamentEntryIds,
 } from "@/server/services/tournament-queries";
 import { GAME_CONFIG } from "@/lib/games";
 import { lobbyWord } from "@/lib/lobbies";
@@ -83,11 +84,15 @@ export default async function DashboardPage() {
         .filter((e) => e.match.isEntryList && e.match.status === "REGISTRATION_CLOSED")
         .flatMap((e) => (e.match.tournament?.format === "BRACKET" ? [e.match.tournament] : []))
         .map(async (t) => {
-          const [state, matches] = await Promise.all([
+          const [state, matches, mine] = await Promise.all([
             bracketState(db, t.entryMatchId!, t.id),
             getTournamentMatches(t.id),
+            myTournamentEntryIds(t.id, user.id),
           ]);
-          return [t.id, matches.length ? bracketRounds(state, matches) : null] as const;
+          return [
+            t.id,
+            matches.length ? { rounds: bracketRounds(state, matches), mine } : null,
+          ] as const;
         }),
     ),
   );
@@ -245,11 +250,12 @@ export default async function DashboardPage() {
                     </p>
                   ) : null}
                   {signUp && e.match.tournament && brackets.get(e.match.tournament.id) ? (
-                    // Big brackets (100+ teams) would make the dashboard thousands of pixels tall:
+                    // Big brackets (more than 32 teams) would make the dashboard thousands of pixels tall:
                     // the player's own match is listed here anyway, so link to the full bracket.
-                    brackets.get(e.match.tournament.id)![0]!.matches.length <= 8 ? (
+                    brackets.get(e.match.tournament.id)!.rounds[0]!.matches.length <= 16 ? (
                       <BracketView
-                        rounds={brackets.get(e.match.tournament.id)!}
+                        rounds={brackets.get(e.match.tournament.id)!.rounds}
+                        mine={brackets.get(e.match.tournament.id)!.mine}
                         linkBase="/scrims"
                       />
                     ) : (

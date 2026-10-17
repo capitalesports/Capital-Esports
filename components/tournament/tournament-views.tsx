@@ -111,10 +111,14 @@ const COL_GAP = 40;
 export function BracketView({
   rounds,
   linkBase,
+  mine = [],
 }: {
   rounds: BracketViewRound[];
   linkBase: string;
+  /** The viewer's own registration ids: their team is highlighted in gold. */
+  mine?: string[];
 }) {
+  const own = new Set(mine);
   const total = rounds.length;
   const layout = bracketLayout(
     rounds.map((r) => ({ matches: r.matches.length, byes: r.bye ? 1 : 0 })),
@@ -195,11 +199,15 @@ export function BracketView({
               );
             }
             const m = r.matches[item.index] ?? null;
+            const isMine = !!m?.sides.some((s) => own.has(s.registrationId));
             return (
               <div
                 key={`${ci}-${item.index}`}
                 style={style}
-                className="border-border bg-card absolute rounded-lg border p-2 text-sm"
+                className={cn(
+                  "bg-card absolute rounded-lg border p-2 text-sm",
+                  isMine ? "border-gold ring-gold/40 ring-2" : "border-border",
+                )}
               >
                 {m ? (
                   <Link href={`${linkBase}/${m.id}`} className="block space-y-0.5 hover:opacity-90">
@@ -210,16 +218,28 @@ export function BracketView({
                           key={side}
                           className={cn(
                             "flex justify-between gap-2",
-                            s?.won
-                              ? "text-foreground font-bold"
-                              : s?.won === false
-                                ? "text-muted-foreground"
-                                : "",
+                            s && own.has(s.registrationId)
+                              ? "text-gold font-semibold"
+                              : s?.won
+                                ? "text-foreground font-bold"
+                                : s?.won === false
+                                  ? "text-muted-foreground"
+                                  : "",
                           )}
                         >
-                          <span className="truncate">{s?.name ?? "TBD"}</span>
+                          <span className="truncate">
+                            {s?.name ?? "TBD"}
+                            {s && own.has(s.registrationId) ? (
+                              <span className="bg-gold text-background ml-1.5 rounded px-1 text-[10px] font-bold uppercase">
+                                You
+                              </span>
+                            ) : null}
+                          </span>
                           {s?.won !== null && s?.won !== undefined ? (
-                            <span>{s.won ? "W" : "L"}</span>
+                            <span>
+                              {s.won ? "W" : "L"}
+                              {s.roundDiff ? ` ${s.roundDiff > 0 ? "+" : ""}${s.roundDiff}` : ""}
+                            </span>
                           ) : null}
                         </p>
                       );
@@ -229,7 +249,19 @@ export function BracketView({
                     </span>
                   </Link>
                 ) : (
-                  <p className="text-muted-foreground flex h-full items-center">TBD vs TBD</p>
+                  <div className="flex h-full flex-col justify-center gap-0.5">
+                    {(r.waiting[item.index] ?? [null, null]).map((name, side) => (
+                      <p
+                        key={side}
+                        className={cn(
+                          "truncate",
+                          name ? "text-foreground" : "text-muted-foreground",
+                        )}
+                      >
+                        {name ?? "TBD"}
+                      </p>
+                    ))}
+                  </div>
                 )}
               </div>
             );

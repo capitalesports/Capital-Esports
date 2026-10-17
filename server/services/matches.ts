@@ -33,7 +33,7 @@ import { notify } from "./notify";
 import { executeRefunds } from "./payments";
 import { refreshLeaderboard } from "./leaderboard";
 import { enqueueMatchRefunds } from "./refunds";
-import { restoreNoShows } from "./results";
+import { reopenResults, restoreNoShows } from "./results";
 
 async function loadMatch(tx: Tx, matchId: string) {
   const match = await tx.match.findUnique({ where: { id: matchId } });
@@ -235,6 +235,12 @@ const transitionSchema = z.object({
 export async function transitionMatchStatus(actor: Actor | null, input: unknown) {
   assertModerator(actor);
   const { matchId, to } = parseInput(transitionSchema, input);
+  // Completed → results pending is a reopen: points and the next bracket game must be undone too.
+  const current = await db.match.findUnique({ where: { id: matchId }, select: { status: true } });
+  if (current?.status === "COMPLETED" && to === "RESULTS_PENDING") {
+    await reopenResults(actor, { matchId });
+    return;
+  }
   const { from, split } = await db.$transaction(async (tx) => {
     const match = await loadMatch(tx, matchId);
     const me = assertCanManageMatch(actor, match);

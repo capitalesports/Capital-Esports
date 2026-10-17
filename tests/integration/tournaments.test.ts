@@ -3,8 +3,9 @@ import { runMatchStatusJob } from "@/server/jobs/match-status-job";
 import { listRegisteredTeams, listTeamRegistrationEvents } from "@/server/services/admin-teams";
 import { registerForMatch } from "@/server/services/registration";
 import { deleteTournament } from "@/server/services/tournament-delete";
-import { setRoomCredentials } from "@/server/services/matches";
+import { setRoomCredentials, transitionMatchStatus } from "@/server/services/matches";
 import { reopenRegistration } from "@/server/services/tournament-reopen";
+import { declareWinner } from "@/server/services/bracket-winner";
 import { approveResults, reopenResults, saveResultRows } from "@/server/services/results";
 import {
   getCurrentTournaments,
@@ -544,7 +545,10 @@ describe("Valorant bracket with byes (DECISIONS M50)", () => {
     expect(round1[0]!.title).toBe("Val Cup — Quarterfinals, game 1");
 
     for (const m of round1.slice(0, 3)) await play(m.id);
-    expect(await roundOf(t.id, 2)).toHaveLength(0); // round 1 not finished yet
+    // The first semifinal is ready as soon as both of its quarterfinals are decided (M66).
+    expect(await Promise.all((await roundOf(t.id, 2)).map((m) => namesOf(m.id)))).toEqual([
+      ["S1", "S3"],
+    ]);
     await play(round1[3]!.id);
     const semis = await roundOf(t.id, 2);
     expect(await Promise.all(semis.map((m) => namesOf(m.id)))).toEqual([
@@ -617,7 +621,10 @@ describe("Valorant bracket with byes (DECISIONS M50)", () => {
     expect(await roundOf(t.id, 2)).toHaveLength(2);
 
     await reopenResults(mod, { matchId: round1[0]!.id, reason: "wrong winner" });
-    expect(await roundOf(t.id, 2)).toHaveLength(0);
+    // Only the semifinal this game fed is removed; the other one stays (M66).
+    expect(await Promise.all((await roundOf(t.id, 2)).map((m) => namesOf(m.id)))).toEqual([
+      ["S5", "S7"],
+    ]);
     await approveResults(mod, { matchId: round1[0]!.id });
     const again = await roundOf(t.id, 2);
     expect(await namesOf(again[0]!.id)).toEqual(["S1", "S3"]);
@@ -1135,5 +1142,92 @@ describe("reopening registration closed by mistake (DECISIONS M61)", () => {
     await expect(
       reopenRegistration(admin, { tournamentId: t.id, closesAt: inDays(2) }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+});
+
+describe("one-click winner for two-team bracket games (DECISIONS M65)", () => {
+  it("moves the winner on, removes the old room details and builds the next round", async () => {
+    await testDb().season.create({
+      data: {
+        game: "VALORANT",
+        name: "S1",
+        startsAt: addDays(new Date(), -10),
+        endsAt: addDays(new Date(), 60),
+        isActive: true,
+      },
+    });
+    const t = await createTournament(admin, {
+      game: "VALORANT",
+      mode: "TWO_V_TWO",
+      title: "Winner Cup",
+      startsAt: inDays(3),
+      prizePool: "0",
+    });
+    for (let i = 0; i < 4; i++) {
+      const a = await createPlayer("VALORANT");
+      const b = await createPlayer("VALORANT");
+      const g = await testDb().gameProfile.findFirstOrThrow({ where: { userId: b.id } });
+      await registerForMatch(
+        { id: a.id, role: "PLAYER" },
+        {
+          matchId: t.entryMatchId!,
+          teamName: `Win ${i}`,
+          players: [{ gameId: g.gameId, ign: g.ign }],
+        },
+      );
+    }
+    const [m1, m2] = await generateBracket(admin, {
+      tournamentId: t.id,
+      firstRoundStartsAt: inDays(3),
+    });
+    await setRoomCredentials(admin, { matchId: m1!.id, roomId: "ROOM-1" });
+    const regsOf = (matchId: string) =>
+      testDb().registration.findMany({ where: { matchId }, orderBy: { position: "asc" } });
+    const [a1] = await regsOf(m1!.id);
+    await expect(
+      declareWinner(mod, { matchId: m1!.id, winnerRegistrationId: a1!.id }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const [, b2] = await regsOf(m2!.id);
+    await expect(
+      declareWinner(admin, { matchId: m1!.id, winnerRegistrationId: b2!.id }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+
+    await expect(
+      declareWinner(admin, {
+        matchId: m1!.id,
+        winnerRegistrationId: a1!.id,
+        winnerRounds: 2,
+        loserRounds: 4,
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+    await declareWinner(admin, {
+      matchId: m1!.id,
+      winnerRegistrationId: a1!.id,
+      winnerRounds: 4,
+      loserRounds: 2,
+    });
+    expect(
+      (await testDb().result.findMany({ where: { matchId: m1!.id } }))
+        .map((r) => r.roundDiff)
+        .sort(),
+    ).toEqual([-2, 2]);
+    const done = await testDb().match.findUniqueOrThrow({ where: { id: m1!.id } });
+    expect(done).toMatchObject({ status: "COMPLETED", roomId: null, roomPassword: null });
+    await expect(
+      declareWinner(admin, { matchId: m1!.id, winnerRegistrationId: a1!.id }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    await declareWinner(admin, { matchId: m2!.id, winnerRegistrationId: b2!.id });
+    // "Move to results pending" on a decided game reopens it properly: points and the next game go.
+    await transitionMatchStatus(admin, { matchId: m2!.id, to: "RESULTS_PENDING" });
+    expect(await testDb().pointsEntry.count({ where: { matchId: m2!.id } })).toBe(0);
+    expect(await testDb().match.count({ where: { tournamentId: t.id, bracketRound: 2 } })).toBe(0);
+    await declareWinner(admin, { matchId: m2!.id, winnerRegistrationId: b2!.id });
+    const final = await testDb().match.findFirstOrThrow({
+      where: { tournamentId: t.id, bracketRound: 2 },
+    });
+    expect((await regsOf(final.id)).map((r) => r.teamName).sort()).toEqual(
+      [a1!.teamName, b2!.teamName].sort(),
+    );
   });
 });

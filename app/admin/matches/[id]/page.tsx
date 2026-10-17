@@ -26,6 +26,8 @@ import { requireStaffPage } from "@/server/auth/guards";
 import { toActor } from "@/server/auth/session";
 import { getMatchForAdmin } from "@/server/queries/admin-matches";
 import { getLobbyGroup } from "@/server/queries/matches";
+import { PickWinnerButtons } from "@/components/admin/pick-winner";
+import { isHeadToHead } from "@/lib/match-modes";
 import { ACTIVE_REGISTRATION, listMatchRegistrations } from "@/server/services/admin-registrations";
 import { GAME_CONFIG } from "@/lib/games";
 import { lobbyNoun, lobbyWord } from "@/lib/lobbies";
@@ -52,6 +54,13 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
       ? match.registrations.filter((r) => r.status === "WAITLISTED").length
       : 0;
   const confirmed = match.registrations.filter((r) => r.status === "CONFIRMED").length;
+  const winnerEntries = match.registrations
+    .filter((r) => r.status === "CONFIRMED")
+    .sort((a, b) => a.position - b.position)
+    .map((r) => ({
+      registrationId: r.id,
+      name: r.team?.name ?? r.teamName ?? r.user.displayName ?? "Player",
+    }));
   const editable = isEditable(match.status);
   const canPromote = match.status === "REGISTRATION_OPEN" || match.status === "REGISTRATION_CLOSED";
   const lower = (s: string) => s.replace(/_/g, " ").toLowerCase();
@@ -186,6 +195,26 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
           ))}
         </dl>
         <div className="space-y-4">
+          {match.tournament &&
+          match.bracketRound !== null &&
+          isHeadToHead(match.mode) &&
+          ["REGISTRATION_CLOSED", "LIVE", "RESULTS_PENDING"].includes(match.status) &&
+          winnerEntries.length === 2 ? (
+            <section aria-labelledby="winner-h" className="card-ds space-y-3 p-4">
+              <h2 id="winner-h" className="font-semibold">
+                Pick the winner
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                After the game: the winner moves to the next round of the bracket, and this game&apos;s
+                room details are removed from both teams.
+              </p>
+              <PickWinnerButtons
+                tournamentId={match.tournament.id}
+                matchId={match.id}
+                entries={winnerEntries}
+              />
+            </section>
+          ) : null}
           <StatusControls matchId={match.id} status={match.status} />
           <RoomCredentialsForm
             matchId={match.id}

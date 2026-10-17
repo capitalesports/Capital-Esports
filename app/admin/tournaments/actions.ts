@@ -15,6 +15,7 @@ import {
 } from "@/server/services/tournaments";
 import { deleteTournament } from "@/server/services/tournament-delete";
 import { reopenRegistration } from "@/server/services/tournament-reopen";
+import { declareWinner } from "@/server/services/bracket-winner";
 
 function refresh(id?: string) {
   revalidatePath("/admin/tournaments");
@@ -62,6 +63,20 @@ export async function reopenRegistrationAction(input: { tournamentId: string; cl
     refresh(input.tournamentId);
     return r;
   }, "Registration reopened");
+}
+
+export async function declareWinnerAction(input: {
+  tournamentId: string;
+  matchId: string;
+  winnerRegistrationId: string;
+  winnerRounds?: string;
+  loserRounds?: string;
+}) {
+  return runAction(async () => {
+    await declareWinner(await requireAdmin(), input);
+    refresh(input.tournamentId);
+    revalidatePath("/dashboard");
+  }, "Winner saved; they move to the next round");
 }
 
 export async function deleteTournamentAction(input: { tournamentId: string }) {
