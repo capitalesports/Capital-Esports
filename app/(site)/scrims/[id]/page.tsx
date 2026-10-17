@@ -23,7 +23,7 @@ import {
   playedInMatch,
 } from "@/server/queries/results";
 import { isConfirmedPlayer } from "@/server/services/registration";
-import { getContent } from "@/server/services/content";
+import { getContent, getSocialLinks } from "@/server/services/content";
 import { GAME_CONFIG } from "@/lib/games";
 import { isOpenEntry, lobbyNoun, lobbyWord, takesEveryone } from "@/lib/lobbies";
 import { MODE_LABEL, isHeadToHead, isTeamMode, playersPerSlot } from "@/lib/match-modes";
@@ -49,7 +49,8 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
   const { id } = await params;
   const match = await getPublicMatch(id);
   if (!match) notFound();
-  const user = await getCurrentUser();
+  const [user, socialLinks] = await Promise.all([getCurrentUser(), getSocialLinks()]);
+  const whatsappUrl = socialLinks.find((l) => l.platform === "WHATSAPP")?.url ?? null;
   const path = `/scrims/${match.id}`;
   const [panel, rules, confirmed, registered, group] = await Promise.all([
     buildPanelState(match, user, path),
@@ -304,6 +305,7 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
               profileHref={`/profile?returnTo=${encodeURIComponent(path)}`}
               checkoutMode={match.paymentQrUrl ? "manual" : checkoutMode()}
               entryFeePaise={match.entryFeePaise}
+              whatsappUrl={whatsappUrl}
             />
           </section>
           {showRoom ? <RoomPanel matchId={match.id} /> : null}

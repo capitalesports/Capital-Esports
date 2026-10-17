@@ -803,3 +803,8 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 - `Match.entryLimit` (on the sign-up list): an optional cap set in the tournament create/edit forms as "Team limit (optional)" ("Player limit" in solo, "Squad limit" in squad); the help shows the player total (e.g. 50 teams × 4 = 200 players). Empty = unlimited, as before (M50).
 - `entryCap()` (lib/lobbies) is the one rule for registration, late payments and the registration panel: capped matches use maxSlots; open entry and sign-up lists are unlimited unless a limit is set. Once full, new sign-ups are waitlisted; cancellations and expired payments promote the waitlist as for capped scrims. Raising or removing the limit promotes waitlisted entries at once (with the "slot available" notice); it can't be set below the current number of sign-ups.
 - The tournament page shows "Teams 26 / 50" when a limit is set.
+
+## M70 — Join the WhatsApp community before registering (2026-10-18)
+
+- Clicking Register (scrims and tournaments) first opens a pop-up: "Join our WhatsApp community" — room ID and password, the 30-minute reminder, timing changes and results go out there first. "Join now" opens the community link (from Admin → Content → Social links) and then offers "I joined, continue to register"; "Already joined, continue" goes straight to the registration form. Once a player has done either, this device remembers it (localStorage) and goes straight to the form next time. No WhatsApp link set = no pop-up. Discord stays as it was.
+- The pop-up loads only when Register is clicked (`next/dynamic`), so match pages stay as light as before; bundle baseline re-recorded for the shared-chunk regrouping.

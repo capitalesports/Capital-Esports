@@ -20,6 +20,17 @@ import { ManualPaymentPanel } from "./manual-payment-panel";
 import { UseFreeSlotButton } from "./use-free-slot-button";
 
 // Only players adding or fixing a game ID need this form: keep it out of the match page's first load.
+const WhatsappGate = dynamic(() => import("./whatsapp-gate").then((m) => m.WhatsappGate));
+
+/** Whether this device already joined (or said so) the WhatsApp community (M70). */
+function joinedWhatsapp(): boolean {
+  try {
+    return localStorage.getItem("whatsapp-community-joined") === "1";
+  } catch {
+    return false;
+  }
+}
+
 const RegistrationDialog = dynamic(() =>
   import("./registration-dialog").then((m) => m.RegistrationDialog),
 );
@@ -135,6 +146,7 @@ function RegisterLauncher({
   entryFeePaise,
   profileHref,
   checkoutMode,
+  whatsappUrl,
 }: {
   matchId: string;
   mode: MatchMode;
@@ -146,9 +158,15 @@ function RegisterLauncher({
   entryFeePaise: number;
   profileHref: string;
   checkoutMode: CheckoutMode;
+  whatsappUrl: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [gate, setGate] = useState(false);
+  const startRegistration = () => {
+    setLoaded(true);
+    setOpen(true);
+  };
   const { run, pending, fieldErrors } = useRegisterFlow(matchId, profileHref, checkoutMode);
   const team = isTeamMode(mode);
   return (
@@ -156,8 +174,9 @@ function RegisterLauncher({
       <Button
         className="w-full"
         onClick={() => {
-          setLoaded(true);
-          setOpen(true);
+          // WhatsApp community first (M70), until this device has joined.
+          if (whatsappUrl && !joinedWhatsapp()) setGate(true);
+          else startRegistration();
         }}
       >
         {willWaitlist ? "Join waitlist" : team ? "Register team" : "Register"}
@@ -166,6 +185,14 @@ function RegisterLauncher({
         <p className="text-muted-foreground text-xs">
           Team of {size}: you register as IGL. Use your saved team or enter your players&apos; IDs.
         </p>
+      ) : null}
+      {gate && whatsappUrl ? (
+        <WhatsappGate
+          open={gate}
+          onOpenChange={setGate}
+          whatsappUrl={whatsappUrl}
+          onContinue={startRegistration}
+        />
       ) : null}
       {loaded ? (
         <RegistrationDialog
@@ -195,12 +222,15 @@ export function RegistrationPanel({
   profileHref,
   checkoutMode = "stub",
   entryFeePaise = 0,
+  whatsappUrl = null,
 }: {
   matchId: string;
   state: RegistrationPanelState;
   profileHref: string;
   checkoutMode?: CheckoutMode;
   entryFeePaise?: number;
+  /** WhatsApp community link: players are asked to join before registering (M70). */
+  whatsappUrl?: string | null;
 }) {
   const cancel = useAction(cancelRegistrationAction);
   const respond = useAction(respondToRosterAction);
@@ -242,6 +272,7 @@ export function RegistrationPanel({
             entryFeePaise={entryFeePaise}
             profileHref={profileHref}
             checkoutMode={checkoutMode}
+            whatsappUrl={whatsappUrl}
           />
         </div>
       );
@@ -259,6 +290,7 @@ export function RegistrationPanel({
             entryFeePaise={entryFeePaise}
             profileHref={profileHref}
             checkoutMode={checkoutMode}
+            whatsappUrl={whatsappUrl}
           />
         </div>
       );

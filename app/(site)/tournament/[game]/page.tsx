@@ -18,7 +18,7 @@ import { WinnersList } from "@/components/tournament/winners-list";
 import { getCurrentUser } from "@/server/auth/session";
 import { getPublicMatch } from "@/server/queries/matches";
 import { buildPanelState, checkoutMode } from "@/server/queries/registration-panel";
-import { getActiveSponsors, getContent } from "@/server/services/content";
+import { getActiveSponsors, getContent, getSocialLinks } from "@/server/services/content";
 import { pointsConfigFor } from "@/server/services/leaderboard";
 import {
   bracketRounds,
@@ -94,14 +94,16 @@ export default async function GameTournamentPage({
   const basePath = `/tournament/${cfg.slug}`;
   const cards = current.length > 1 ? await withEntryInfo(current) : [];
   const path = t === current[0] ? basePath : `${basePath}?t=${t.id}`;
-  const [entry, matches, user, config, sponsors, howToRegister] = await Promise.all([
+  const [entry, matches, user, config, sponsors, howToRegister, socialLinks] = await Promise.all([
     t.entryMatchId ? getPublicMatch(t.entryMatchId) : null,
     getTournamentMatches(t.id),
     getCurrentUser(),
     pointsConfigFor(db, game),
     getActiveSponsors(),
     getContent("tournament.howToRegister"),
+    getSocialLinks(),
   ]);
+  const whatsappUrl = socialLinks.find((l) => l.platform === "WHATSAPP")?.url ?? null;
   const panel =
     entry && entry.status === "REGISTRATION_OPEN" ? await buildPanelState(entry, user, path) : null;
   const standings = t.format === "LOBBY_POINTS" ? await lobbyStandingsFor(db, t.id) : [];
@@ -268,6 +270,7 @@ export default async function GameTournamentPage({
                 profileHref={`/profile?returnTo=${encodeURIComponent(path)}`}
                 checkoutMode={entry.paymentQrUrl ? "manual" : checkoutMode()}
                 entryFeePaise={entry.entryFeePaise}
+                whatsappUrl={whatsappUrl}
               />
             ) : (
               <p className="text-muted-foreground text-sm">
