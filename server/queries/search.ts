@@ -48,7 +48,7 @@ export async function searchSite(q: string) {
       take: 10,
     }),
     db.match.findMany({
-      where: { title: contains, isEntryList: false },
+      where: { title: contains, isEntryList: false, bracketRound: null },
       select: publicMatchSelect,
       orderBy: { startsAt: "desc" },
       take: 10,

@@ -788,3 +788,7 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 
 - A later-round game is created as soon as both of its sides are known (`readyBracketPairs`), instead of waiting for the whole round; a winner shows in their next-round slot at once ("king / TBD"), via `bracketSlots`. Pairing is unchanged (consecutive pairs; an odd count's last entrant has a bye and goes first next round). Each new game starts `NEXT_ROUND_GAP_MIN` after the latest game of the round before.
 - Reopening a result now removes only the later games along that game's winner's path (`rollbackBracketAdvance`), not the whole next round.
+
+## M67 — Bracket games stay out of the home match rows (2026-10-18)
+
+- The home "Open & Upcoming" and "Today" rows (and site search) skip bracket games (`bracketRound` set): each is a 2-team game of a tournament, already shown in the tournament's bracket, and listed them as "Closed, 2/2 slots" cards. Lobby-tournament games still show there; the /scrims page lists scrims only, as before.

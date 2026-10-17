@@ -38,6 +38,8 @@ export async function getOpenAndUpcomingMatches(now: Date) {
       status: { in: ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE"] },
       isEntryList: false,
       parentMatchId: null,
+      // Bracket games (2 teams each) live in the tournament chart, not in these rows (M67).
+      bracketRound: null,
     },
     orderBy: { startsAt: "asc" },
     take: 16,
@@ -52,6 +54,8 @@ export function getTodayMatches(now: Date) {
       status: { not: "CANCELLED" },
       isEntryList: false,
       parentMatchId: null,
+      // Bracket games (2 teams each) live in the tournament chart, not in these rows (M67).
+      bracketRound: null,
     },
     orderBy: { startsAt: "asc" },
     take: 12,
