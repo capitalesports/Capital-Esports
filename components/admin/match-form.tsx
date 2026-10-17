@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { modeOptionLabel } from "@/lib/home";
 import { useRouter } from "next/navigation";
 import { createMatchAction, updateMatchAction } from "@/app/admin/matches/actions";
 import { FormField } from "@/components/common/form-field";
@@ -123,7 +124,9 @@ export function MatchForm({
       <FormField
         id="m-game"
         label="Game"
-        help={lockGameAndMode ? "Players have registered: game, kind and mode are locked" : undefined}
+        help={
+          lockGameAndMode ? "Players have registered: game, kind and mode are locked" : undefined
+        }
         errors={err("game")}
       >
         <NativeSelect
@@ -159,7 +162,7 @@ export function MatchForm({
         >
           {MODES_FOR_GAME[v.game].map((m) => (
             <option key={m} value={m}>
-              {MODE_LABEL[m]}
+              {modeOptionLabel(v.game, m)}
             </option>
           ))}
         </NativeSelect>

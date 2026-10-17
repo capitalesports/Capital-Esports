@@ -41,6 +41,16 @@ export function gameModeLabel(game: Game, mode: MatchMode): string {
   return MODE_LABEL[mode];
 }
 
+/**
+ * Admin mode dropdowns: the game's own name with the team size, e.g. "Clash Squad (4v4)",
+ * "TDM (4v4)", "Lone Wolf 2v2", "Deathmatch (Solo)".
+ */
+export function modeOptionLabel(game: Game, mode: MatchMode): string {
+  const name = gameModeLabel(game, mode);
+  const size = MODE_LABEL[mode];
+  return name === size || name.includes(size) ? name : `${name} (${size})`;
+}
+
 /** Order of a game's tournament mode buttons (Valorant: Deathmatch, Scrims, 5v5, then 1v1). */
 const MODE_ORDER: Record<Game, MatchMode[]> = {
   FREE_FIRE: ["SOLO", "DUO", "SQUAD", "ONE_V_ONE", "TWO_V_TWO", "FOUR_V_FOUR"],

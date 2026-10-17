@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { modeOptionLabel } from "@/lib/home";
 import { useRouter } from "next/navigation";
 import {
   addLobbyMatchesAction,
@@ -23,7 +24,6 @@ import {
   capacityText,
   isHeadToHead,
   isTeamMode,
-  MODE_LABEL,
   MODES_FOR_GAME,
   type MatchMode,
 } from "@/lib/match-modes";
@@ -103,7 +103,7 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
         <NativeSelect id="t-mode" value={v.mode} onChange={(e) => set("mode", e.target.value)}>
           {MODES_FOR_GAME[v.game].map((m) => (
             <option key={m} value={m}>
-              {MODE_LABEL[m]}
+              {modeOptionLabel(v.game, m)}
             </option>
           ))}
         </NativeSelect>
@@ -268,7 +268,7 @@ function StructureFields({
         >
           {MODES_FOR_GAME[s.game].map((m) => (
             <option key={m} value={m}>
-              {MODE_LABEL[m]}
+              {modeOptionLabel(s.game, m)}
             </option>
           ))}
         </NativeSelect>
