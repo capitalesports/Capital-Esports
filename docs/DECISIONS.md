@@ -792,3 +792,8 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 ## M67 — Bracket games stay out of the home match rows (2026-10-18)
 
 - The home "Open & Upcoming" and "Today" rows (and site search) skip bracket games (`bracketRound` set): each is a 2-team game of a tournament, already shown in the tournament's bracket, and listed them as "Closed, 2/2 slots" cards. Lobby-tournament games still show there; the /scrims page lists scrims only, as before.
+
+## M68 — Tournament cards (2026-10-18)
+
+- One shared `TournamentCard` (`components/tournament/tournament-card.tsx`): game, mode, stage badge (Registration open / Coming soon / In progress / Finished), title, prize pool, entry fee, start, and when registration opens or closes. Used on /tournament ("Upcoming tournaments") and, when a game has several tournaments this week, at the top of /tournament/<game> in place of the mode chips: one card per tournament, the shown one outlined in gold, each linking with `?t=<id>`. The old `TournamentModeSwitch` is removed.
+- Layout fix: the bracket column on /tournament/<game> can shrink (`minmax(0,1fr)` + `min-w-0`) so a wide bracket scrolls inside its box instead of pushing the Registration box off screen.

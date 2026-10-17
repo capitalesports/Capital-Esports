@@ -12,7 +12,7 @@ import {
   LobbyStandingsTable,
   StreamEmbed,
 } from "@/components/tournament/tournament-views";
-import { TournamentModeSwitch } from "@/components/tournament/mode-switch";
+import { TournamentCard } from "@/components/tournament/tournament-card";
 import { TournamentPartners } from "@/components/tournament/tournament-partners";
 import { WinnersList } from "@/components/tournament/winners-list";
 import { getCurrentUser } from "@/server/auth/session";
@@ -24,6 +24,7 @@ import {
   bracketRounds,
   bracketState,
   getCurrentTournaments,
+  withEntryInfo,
   getTournamentLobbies,
   getTournamentMatches,
   myTournamentEntryIds,
@@ -91,6 +92,7 @@ export default async function GameTournamentPage({
   }
 
   const basePath = `/tournament/${cfg.slug}`;
+  const cards = current.length > 1 ? await withEntryInfo(current) : [];
   const path = t === current[0] ? basePath : `${basePath}?t=${t.id}`;
   const [entry, matches, user, config, sponsors, howToRegister] = await Promise.all([
     t.entryMatchId ? getPublicMatch(t.entryMatchId) : null,
@@ -118,7 +120,21 @@ export default async function GameTournamentPage({
 
   return (
     <div className="py-6">
-      <TournamentModeSwitch game={game} basePath={basePath} tournaments={current} activeId={t.id} />
+      {current.length > 1 ? (
+        <nav aria-label="This week's tournaments" className="mb-6">
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {cards.map((c, i) => (
+              <li key={c.id}>
+                <TournamentCard
+                  t={c}
+                  href={i === 0 ? basePath : `${basePath}?t=${c.id}`}
+                  active={c.id === t.id}
+                />
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
       <section
         aria-labelledby="t-title"
         className={`card-ds relative isolate overflow-hidden p-5 sm:p-6 ${cfg.accent.borderSoft}`}
@@ -174,8 +190,8 @@ export default async function GameTournamentPage({
         </dl>
       </section>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
-        <div className="space-y-8">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="min-w-0 space-y-8">
           {winners?.length ? (
             <section aria-labelledby="winners-h">
               <h2 id="winners-h" className="mb-3 text-xl font-bold">

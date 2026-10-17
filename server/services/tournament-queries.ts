@@ -118,6 +118,23 @@ export async function listUpcomingTournaments() {
   return list.flatMap((t) => (t.entryList ? [{ ...t, entry: t.entryList }] : []));
 }
 
+/** Tournaments with their sign-up list's status, times and fee, for tournament cards (M68). */
+export async function withEntryInfo<T extends { entryMatchId: string | null }>(list: T[]) {
+  const ids = list.flatMap((t) => (t.entryMatchId ? [t.entryMatchId] : []));
+  const entries = await db.match.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      status: true,
+      registrationOpensAt: true,
+      registrationClosesAt: true,
+      entryFeePaise: true,
+    },
+  });
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  return list.map((t) => ({ ...t, entry: (t.entryMatchId && byId.get(t.entryMatchId)) || null }));
+}
+
 /** The soonest current tournament for a game (see getCurrentTournaments). */
 export async function getCurrentTournament(game: Game, now = new Date()) {
   return (await getCurrentTournaments(game, now))[0] ?? null;
