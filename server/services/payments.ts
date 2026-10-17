@@ -19,7 +19,7 @@ import {
   type PaymentEvent,
   type RefundEvent,
 } from "@/lib/payments";
-import { takesEveryone } from "@/lib/lobbies";
+import { entryCap } from "@/lib/lobbies";
 import { verifyRazorpayCheckoutSignature } from "@/lib/razorpay-signature";
 import { SITE_NAME } from "@/lib/site";
 import { PHONE_FOR_MONEY_MESSAGE, PHONE_ITEM } from "@/lib/profile";
@@ -234,6 +234,7 @@ async function lockMatchRow(tx: Tx, matchId: string) {
       startsAt: true,
       registrationClosesAt: true,
       entryFeePaise: true,
+      entryLimit: true,
       isEntryList: true,
       tournamentId: true,
       bracketRound: true,
@@ -349,10 +350,13 @@ export async function applyPaymentEvent(
     }
     const open =
       ["REGISTRATION_OPEN", "REGISTRATION_CLOSED"].includes(match.status) && match.startsAt > now;
-    // Open-entry scrims have room while registration is open (lobbies are split at close).
-    const hasRoom = takesEveryone(match)
-      ? match.status === "REGISTRATION_OPEN"
-      : (await slotsTaken(tx, match.id)) < match.maxSlots;
+    // Open-entry scrims have room while registration is open (lobbies are split at close);
+    // a tournament with a team limit (M69) only while under it.
+    const cap = entryCap(match);
+    const hasRoom =
+      cap === null
+        ? match.status === "REGISTRATION_OPEN"
+        : (await slotsTaken(tx, match.id)) < cap;
     if (open && hasRoom) {
       await tx.registration.update({
         where: { id: reg.id },
@@ -362,13 +366,13 @@ export async function applyPaymentEvent(
       return "CONFIRMED";
     }
     // Paid too late: no slot any more. Keep them on the waitlist (if the match still runs) and refund.
-    if (open && !takesEveryone(match))
+    if (open && cap !== null)
       await tx.registration.update({
         where: { id: reg.id },
         data: { status: "WAITLISTED", cancelledAt: null },
       });
     toRefund = await markRefund(tx, payment.id, "No slot available when payment completed");
-    return open && !takesEveryone(match) ? "WAITLISTED_REFUNDED" : "REFUNDED";
+    return open && cap !== null ? "WAITLISTED_REFUNDED" : "REFUNDED";
   });
   if (toRefund) await executeRefunds([toRefund]);
   await Promise.all(events.map(notify));

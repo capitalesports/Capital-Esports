@@ -138,6 +138,9 @@ export default async function AdminTournamentPage({
               prizePool: paiseToRupeesInput(t.prizePoolPaise),
               rulesMarkdown: t.rulesMarkdown,
               streamUrl: t.streamUrl ?? "",
+              game: t.game,
+              mode: t.mode,
+              entryLimit: entry?.entryLimit ? String(entry.entryLimit) : "",
             }}
             structure={
               structureEditable

@@ -266,6 +266,8 @@ model Match {
   prizePaise           Int         @default(0)
   /// Manual UPI payments (DECISIONS M54): the admin's fixed-amount UPI QR for this entry fee.
   paymentQrUrl         String?
+  /// Tournament sign-up lists: optional cap on entries (teams, or players in solo); null = unlimited (DECISIONS M69).
+  entryLimit           Int?
   status               MatchStatus @default(UPCOMING)
   roomId               String?
   roomPassword         String?

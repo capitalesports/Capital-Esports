@@ -3,7 +3,7 @@ import type { RegistrationPanelState } from "@/components/match/registration-pan
 import type { SessionUser } from "@/server/auth/session";
 import { paymentProvider, paymentsEnabled } from "@/server/env";
 import { isTeamMode, playersPerSlot } from "@/lib/match-schema";
-import { takesEveryone } from "@/lib/lobbies";
+import { entryCap } from "@/lib/lobbies";
 import {
   gameProfileFor,
   isGameProfileComplete,
@@ -139,7 +139,8 @@ export async function buildPanelState(
   };
 
   // Open-entry scrims never fill (more lobbies open at close); capped matches waitlist when full.
-  const willWaitlist = !takesEveryone(match) && match._count.registrations >= match.maxSlots;
+  const cap = entryCap(match);
+  const willWaitlist = cap !== null && match._count.registrations >= cap;
   if (!isTeamMode(match.mode)) return { kind: "SOLO", mode: match.mode, willWaitlist, playingAs };
 
   // A saved team can fill the roster in one tap (DECISIONS M17): teammates with a complete ID for

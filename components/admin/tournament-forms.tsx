@@ -25,8 +25,54 @@ import {
   isHeadToHead,
   isTeamMode,
   MODES_FOR_GAME,
+  playersPerSlot,
+  slotUnit,
   type MatchMode,
 } from "@/lib/match-modes";
+
+/**
+ * Optional cap on sign-ups (DECISIONS M69): "Team limit", or "Player limit" in solo modes. Empty =
+ * unlimited; once full, new sign-ups go on the waitlist.
+ */
+function EntryLimitField({
+  id,
+  game,
+  mode,
+  value,
+  onChange,
+  errors,
+}: {
+  id: string;
+  game: Game;
+  mode: MatchMode;
+  value: string;
+  onChange: (v: string) => void;
+  errors?: string[];
+}) {
+  const unit = slotUnit(mode);
+  const size = playersPerSlot(game, mode);
+  const n = Number(value);
+  const label = `${unit[0]!.toUpperCase()}${unit.slice(1, -1)} limit (optional)`;
+  const help =
+    value && Number.isInteger(n) && n > 0
+      ? size > 1
+        ? `Up to ${n} ${unit} × ${size} players = ${n * size} players. When full, new sign-ups go on the waitlist.`
+        : `Up to ${n} players. When full, new sign-ups go on the waitlist.`
+      : `Leave empty for no limit (unlimited ${unit}).`;
+  return (
+    <FormField id={id} label={label} help={help} errors={errors}>
+      <Input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={2}
+        placeholder="No limit"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </FormField>
+  );
+}
 
 function Box({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -56,6 +102,7 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
     registrationClosesAt: "",
     prizePool: "0",
     entryFee: "0",
+    entryLimit: "",
     rulesMarkdown: "",
     streamUrl: "",
   });
@@ -187,6 +234,14 @@ export function CreateTournamentForm({ paymentsEnabled }: { paymentsEnabled: boo
           onChange={(e) => set("entryFee", e.target.value)}
         />
       </FormField>
+      <EntryLimitField
+        id="t-limit"
+        game={v.game}
+        mode={v.mode}
+        value={v.entryLimit}
+        onChange={(val) => set("entryLimit", val)}
+        errors={fieldErrors.entryLimit}
+      />
       <FormField id="t-stream" label="Stream URL (optional)" errors={fieldErrors.streamUrl}>
         <Input
           id="t-stream"
@@ -295,7 +350,17 @@ export function EditTournamentForm({
   structure,
   paymentsEnabled,
 }: {
-  t: { id: string; title: string; prizePool: string; rulesMarkdown: string; streamUrl: string };
+  t: {
+    id: string;
+    title: string;
+    prizePool: string;
+    rulesMarkdown: string;
+    streamUrl: string;
+    game: Game;
+    mode: MatchMode;
+    /** "" = no limit */
+    entryLimit: string;
+  };
   /** Present only while start, mode and entry fee may still change. */
   structure?: TournamentStructure;
   paymentsEnabled: boolean;
@@ -315,6 +380,7 @@ export function EditTournamentForm({
             prizePool: v.prizePool,
             rulesMarkdown: v.rulesMarkdown,
             streamUrl: v.streamUrl || undefined,
+            entryLimit: v.entryLimit,
             ...(s
               ? {
                   startsAt: s.startsAt,
@@ -347,6 +413,14 @@ export function EditTournamentForm({
             onChange={(e) => setV({ ...v, prizePool: e.target.value })}
           />
         </FormField>
+        <EntryLimitField
+          id="e-limit"
+          game={s?.game ?? v.game}
+          mode={s?.mode ?? v.mode}
+          value={v.entryLimit}
+          onChange={(val) => setV({ ...v, entryLimit: val })}
+          errors={fieldErrors.entryLimit}
+        />
         <div className="sm:col-span-2">
           <FormField id="e-stream" label="Stream URL" errors={fieldErrors.streamUrl}>
             <Input

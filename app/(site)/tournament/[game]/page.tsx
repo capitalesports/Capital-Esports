@@ -185,7 +185,10 @@ export default async function GameTournamentPage({
           </div>
           <div>
             <dt className="text-muted-foreground text-xs">{entryCountLabel(t.mode)}</dt>
-            <dd className="font-heading text-lg">{entry?._count.registrations ?? 0}</dd>
+            <dd className="font-heading text-lg">
+              {entry?._count.registrations ?? 0}
+              {entry?.entryLimit ? ` / ${entry.entryLimit}` : ""}
+            </dd>
           </div>
         </dl>
       </section>

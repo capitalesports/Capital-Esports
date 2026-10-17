@@ -10,7 +10,7 @@ import { enforceRateLimit } from "@/server/rate-limit";
 import { parseInput } from "@/server/validation";
 import { isBanRecordActive, isRegistrationBlocked } from "@/lib/bans";
 import { GAME_CONFIG } from "@/lib/games";
-import { takesEveryone } from "@/lib/lobbies";
+import { entryCap } from "@/lib/lobbies";
 import { isTeamMode, playersPerSlot } from "@/lib/match-schema";
 import {
   isGameProfileComplete,
@@ -51,6 +51,7 @@ export async function lockMatch(tx: Tx, matchId: string) {
       maxSlots: true,
       entryFeePaise: true,
       paymentQrUrl: true,
+      entryLimit: true,
       isEntryList: true,
       tournamentId: true,
       bracketRound: true,
@@ -65,7 +66,7 @@ type LockedMatch = Awaited<ReturnType<typeof lockMatch>>;
 
 /** Open-entry scrims and tournament sign-ups take everyone (split at close); others fill up to maxSlots. */
 function capacityOf(match: LockedMatch): number {
-  return takesEveryone(match) ? Number.POSITIVE_INFINITY : match.maxSlots;
+  return entryCap(match) ?? Number.POSITIVE_INFINITY;
 }
 
 async function slotsTaken(tx: Tx, matchId: string) {
@@ -106,11 +107,16 @@ async function alreadyInMatch(tx: Tx, matchId: string, userIds: string[]) {
  */
 export async function promoteWaitlist(
   tx: Tx,
-  match: Pick<LockedMatch, "id" | "maxSlots" | "entryFeePaise" | "paymentQrUrl">,
+  match: Pick<LockedMatch, "id" | "maxSlots" | "entryFeePaise" | "paymentQrUrl"> & {
+    isEntryList?: boolean;
+    entryLimit?: number | null;
+  },
 ): Promise<string[]> {
   const promoted: string[] = [];
   let taken = await slotsTaken(tx, match.id);
-  while (taken < match.maxSlots) {
+  // A tournament with a team limit (M69) fills up to it; other matches up to maxSlots.
+  const cap = match.isEntryList ? (match.entryLimit ?? Number.POSITIVE_INFINITY) : match.maxSlots;
+  while (taken < cap) {
     const next = await tx.registration.findFirst({
       where: { matchId: match.id, status: "WAITLISTED" },
       orderBy: { position: "asc" },

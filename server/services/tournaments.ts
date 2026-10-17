@@ -31,6 +31,7 @@ import {
 } from "@/lib/tournament";
 import { applyTransition } from "./match-status";
 import { cancelMatch } from "./matches";
+import { promoteWaitlist } from "./registration";
 import { notify, type NotificationEvent } from "./notify";
 import { executeRefunds, markRefund } from "./payments";
 import { bracketState, lobbyStandingsFor, unitOf } from "./tournament-queries";
@@ -47,6 +48,12 @@ const money = z.union([z.string(), z.number()]).transform((v, ctx) => {
   }
   return p;
 });
+
+const entryLimitNumber = z.coerce
+  .number()
+  .int("Whole number")
+  .min(2, "At least 2")
+  .max(10_000, "At most 10,000");
 
 const istDateTime = z.string().transform((v, ctx) => {
   const d = istInputToUtc(v);
@@ -76,6 +83,11 @@ export const tournamentFormSchema = z
     entryFee: money.default(0),
     rulesMarkdown: z.string().max(20_000).default(""),
     streamUrl: httpsOrEmpty,
+    /** Optional cap on sign-ups (teams, or players in solo); empty = unlimited (DECISIONS M69). */
+    entryLimit: z.preprocess(
+      (v) => (v === "" || v === null ? undefined : v),
+      entryLimitNumber.optional(),
+    ),
     /** When sign-ups open (IST). Empty = right away. */
     registrationOpensAt: z.preprocess(
       (v) => (v === "" || v === null ? undefined : v),
@@ -173,6 +185,7 @@ export async function createTournament(actor: Actor | null, input: unknown) {
         maxSlots: slots,
         // The fee is paid when signing up (the lobby/bracket matches copy entries, never charge again).
         entryFeePaise: v.entryFee,
+        entryLimit: v.entryLimit ?? null,
         // Opens later if a future opening time was set (the status job opens it then).
         status:
           v.registrationOpensAt && v.registrationOpensAt > new Date()
@@ -276,6 +289,8 @@ const updateSchema = z.object({
   prizePool: money,
   /** Only while nobody has signed up (players already paid or agreed to the old fee). */
   entryFee: z.preprocess(blankToUndefined, money.optional()),
+  /** "" = remove the limit; absent = leave it as it is (M69). */
+  entryLimit: z.preprocess((v) => (v === "" ? null : v), entryLimitNumber.nullable().optional()),
   rulesMarkdown: z.string().max(20_000),
   streamUrl: httpsOrEmpty,
   /** Structure: only while nobody has signed up and no lobby/bracket match exists. */
@@ -336,10 +351,24 @@ async function entryFeeChange(tx: Tx, t: TournamentRow, fee: number | undefined)
 export async function updateTournament(actor: Actor | null, input: unknown) {
   const me = assertAdmin(actor);
   const v = parseInput(updateSchema, input);
-  return await db.$transaction(async (tx) => {
+  const { after, promoted, entryMatchId } = await db.$transaction(async (tx) => {
     const before = await loadTournament(tx, v.tournamentId);
     const change = await structureChange(tx, before, v);
     const entryFeePaise = await entryFeeChange(tx, before, v.entryFee);
+    let promoted: string[] = [];
+    if (v.entryLimit && before.entryMatchId) {
+      const taken = await tx.registration.count({
+        where: { matchId: before.entryMatchId, status: { in: ["CONFIRMED", "PENDING_PAYMENT"] } },
+      });
+      if (v.entryLimit < taken)
+        throw new AppError(
+          "VALIDATION",
+          `${taken} have already signed up: the limit can't be lower.`,
+          {
+            entryLimit: [`At least ${taken}`],
+          },
+        );
+    }
     const after = await tx.tournament.update({
       where: { id: v.tournamentId },
       data: {
@@ -365,6 +394,7 @@ export async function updateTournament(actor: Actor | null, input: unknown) {
         data: {
           title: `${v.title} — sign-up`,
           ...(entryFeePaise === null ? {} : { entryFeePaise }),
+          ...(v.entryLimit === undefined ? {} : { entryLimit: v.entryLimit }),
           ...(change
             ? {
                 startsAt: change.startsAt,
@@ -375,6 +405,11 @@ export async function updateTournament(actor: Actor | null, input: unknown) {
             : {}),
         },
       });
+      // A higher limit (or none) frees slots: the waitlist moves up (M69).
+      if (v.entryLimit !== undefined) {
+        const entry = await tx.match.findUniqueOrThrow({ where: { id: before.entryMatchId } });
+        promoted = await promoteWaitlist(tx, entry);
+      }
     }
     await writeAudit(tx, {
       actorId: me.id,
@@ -384,8 +419,11 @@ export async function updateTournament(actor: Actor | null, input: unknown) {
       before,
       after,
     });
-    return after;
+    return { after, promoted, entryMatchId: before.entryMatchId };
   });
+  if (promoted.length && entryMatchId)
+    await notify({ type: "WAITLIST_PROMOTED", userIds: promoted, matchId: entryMatchId });
+  return after;
 }
 
 const cancelTournamentSchema = z.object({

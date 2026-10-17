@@ -26,6 +26,7 @@ export const publicMatchSelect = {
   prizePaise: true,
   /** Manual UPI payments (M54): the QR players pay. */
   paymentQrUrl: true,
+  entryLimit: true,
   status: true,
   streamUrl: true,
   cancelReason: true,

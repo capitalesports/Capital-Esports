@@ -41,6 +41,7 @@ export async function updateTournamentAction(input: {
   startsAt?: string;
   mode?: string;
   entryFee?: string;
+  entryLimit?: string;
 }) {
   return runAction(async () => {
     await updateTournament(await requireAdmin(), input);

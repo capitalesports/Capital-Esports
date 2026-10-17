@@ -1231,3 +1231,50 @@ describe("one-click winner for two-team bracket games (DECISIONS M65)", () => {
     );
   });
 });
+
+describe("optional tournament entry limit (DECISIONS M69)", () => {
+  it("fills up to the limit, waitlists the rest, and moves the waitlist up when raised", async () => {
+    await expect(
+      createTournament(admin, {
+        game: "FREE_FIRE",
+        mode: "SOLO",
+        title: "Limit Cup",
+        startsAt: inDays(3),
+        prizePool: "0",
+        entryLimit: "1",
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION", fieldErrors: { entryLimit: expect.any(Array) } });
+    const t = await createTournament(admin, {
+      game: "FREE_FIRE",
+      mode: "SOLO",
+      title: "Limit Cup",
+      startsAt: inDays(3),
+      prizePool: "0",
+      entryLimit: "2",
+    });
+    const players = [
+      await createPlayer("FREE_FIRE"),
+      await createPlayer("FREE_FIRE"),
+      await createPlayer("FREE_FIRE"),
+    ];
+    const results = [];
+    for (const p of players)
+      results.push(
+        await registerForMatch({ id: p.id, role: "PLAYER" }, { matchId: t.entryMatchId! }),
+      );
+    expect(results.map((r) => r.status)).toEqual(["CONFIRMED", "CONFIRMED", "WAITLISTED"]);
+
+    const base = { tournamentId: t.id, title: "Limit Cup", prizePool: "0", rulesMarkdown: "" };
+    await expect(updateTournament(admin, { ...base, entryLimit: "1" })).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    await updateTournament(admin, { ...base, entryLimit: "3" });
+    const regs = await testDb().registration.findMany({ where: { matchId: t.entryMatchId! } });
+    expect(regs.every((r) => r.status === "CONFIRMED")).toBe(true);
+    // "" removes the limit.
+    await updateTournament(admin, { ...base, entryLimit: "" });
+    expect(
+      (await testDb().match.findUniqueOrThrow({ where: { id: t.entryMatchId! } })).entryLimit,
+    ).toBeNull();
+  });
+});

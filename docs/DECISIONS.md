@@ -797,3 +797,9 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 
 - One shared `TournamentCard` (`components/tournament/tournament-card.tsx`): game, mode, stage badge (Registration open / Coming soon / In progress / Finished), title, prize pool, entry fee, start, and when registration opens or closes. Used on /tournament ("Upcoming tournaments") and, when a game has several tournaments this week, at the top of /tournament/<game> in place of the mode chips: one card per tournament, the shown one outlined in gold, each linking with `?t=<id>`. The old `TournamentModeSwitch` is removed.
 - Layout fix: the bracket column on /tournament/<game> can shrink (`minmax(0,1fr)` + `min-w-0`) so a wide bracket scrolls inside its box instead of pushing the Registration box off screen.
+
+## M69 — Optional tournament entry limit (2026-10-18)
+
+- `Match.entryLimit` (on the sign-up list): an optional cap set in the tournament create/edit forms as "Team limit (optional)" ("Player limit" in solo, "Squad limit" in squad); the help shows the player total (e.g. 50 teams × 4 = 200 players). Empty = unlimited, as before (M50).
+- `entryCap()` (lib/lobbies) is the one rule for registration, late payments and the registration panel: capped matches use maxSlots; open entry and sign-up lists are unlimited unless a limit is set. Once full, new sign-ups are waitlisted; cancellations and expired payments promote the waitlist as for capped scrims. Raising or removing the limit promotes waitlisted entries at once (with the "slot available" notice); it can't be set below the current number of sign-ups.
+- The tournament page shows "Teams 26 / 50" when a limit is set.
