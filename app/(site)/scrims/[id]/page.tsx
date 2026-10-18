@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { IntentLink as Link } from "@/components/common/intent-link";
 import { notFound } from "next/navigation";
-import { ExternalLinkIcon } from "lucide-react";
+import { CirclePlayIcon, ExternalLinkIcon } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
+import { contentLink } from "@/lib/content";
+import { cn } from "@/lib/utils";
 import { Artwork } from "@/components/common/artwork";
 import { artKey } from "@/lib/artwork";
 import { ReportDialog } from "@/components/common/report-dialog";
@@ -49,7 +52,12 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
   const { id } = await params;
   const match = await getPublicMatch(id);
   if (!match) notFound();
-  const [user, socialLinks] = await Promise.all([getCurrentUser(), getSocialLinks()]);
+  const [user, socialLinks, howToRegister] = await Promise.all([
+    getCurrentUser(),
+    getSocialLinks(),
+    getContent("tournament.howToRegister"),
+  ]);
+  const howToRegisterUrl = contentLink(howToRegister);
   const whatsappUrl = socialLinks.find((l) => l.platform === "WHATSAPP")?.url ?? null;
   const path = `/scrims/${match.id}`;
   const [panel, rules, confirmed, registered, group] = await Promise.all([
@@ -307,6 +315,17 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
               entryFeePaise={match.entryFeePaise}
               whatsappUrl={whatsappUrl}
             />
+            {howToRegisterUrl ? (
+              <a
+                href={howToRegisterUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(buttonVariants({ variant: "gold-outline" }), "w-full")}
+              >
+                <CirclePlayIcon aria-hidden className="size-4" />
+                How to Register
+              </a>
+            ) : null}
           </section>
           {showRoom ? <RoomPanel matchId={match.id} /> : null}
         </aside>

@@ -30,11 +30,14 @@ export const CONTENT_LABEL: Record<ContentKey, string> = {
   "scrims.video":
     'Scrims page — "How scrims work" video link (https, leave empty to hide the button)',
   "tournament.howToRegister":
-    'Tournament page — "How to Register" video link (https, e.g. YouTube; leave empty to hide the button)',
+    '"How to Register" video link, shown in the Registration box of every tournament and scrim (https, e.g. YouTube; leave empty to hide the button)',
 };
 
 /** Content keys that hold a single link rather than markdown. */
-export const LINK_CONTENT_KEYS: readonly ContentKey[] = ["scrims.video", "tournament.howToRegister"];
+export const LINK_CONTENT_KEYS: readonly ContentKey[] = [
+  "scrims.video",
+  "tournament.howToRegister",
+];
 
 /**
  * Home page settings (Admin → Content → Home page), stored as SiteContent rows under these keys.
