@@ -16,6 +16,7 @@ import { toActor } from "@/server/auth/session";
 import { searchUsers } from "@/server/services/admin-users";
 import { isAccountBanned } from "@/lib/bans";
 import { GAME_CONFIG } from "@/lib/games";
+import { formatIST } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -48,6 +49,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
               <TableHead>Game IDs</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>State</TableHead>
+              <TableHead>Joined</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -75,6 +77,9 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
                       : u.strikes
                         ? `${u.strikes} strike(s)`
                         : "Active"}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+                  {formatIST(u.createdAt)}
                 </TableCell>
               </TableRow>
             ))}
