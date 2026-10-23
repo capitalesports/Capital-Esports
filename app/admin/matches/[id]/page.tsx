@@ -248,6 +248,7 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
             matchId={match.id}
             game={match.game}
             status={match.status}
+            bracketRound={match.bracketRound}
             current={{ roomId: match.roomId, roomPassword: match.roomPassword }}
           />
           {isCloneable(match) ? <CloneControls matchId={match.id} /> : null}

@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import type { Game } from "@/lib/games";
 import { roomCodeLabel, roomNeedsPassword } from "@/lib/room-rules";
 import {
-  canSetRoomCredentials,
+  canSendRoomCode,
   canTransition,
   MANUAL_TRANSITIONS,
   TRANSITION_ACTION_LABEL,
@@ -37,7 +37,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function StatusControls({ matchId, status }: { matchId: string; status: MatchStatus }) {
   const { run, pending } = useAction(transitionMatchAction);
-  const next = MANUAL_TRANSITIONS.filter((to) => to !== "CANCELLED" && canTransition(status, to));
+  // Back to live only by sending a bracket game's room code (RoomCredentialsForm).
+  const next = MANUAL_TRANSITIONS.filter(
+    (to) =>
+      to !== "CANCELLED" &&
+      !(status === "RESULTS_PENDING" && to === "LIVE") &&
+      canTransition(status, to),
+  );
   return (
     <Section title="Status">
       {next.length ? (
@@ -61,11 +67,13 @@ export function RoomCredentialsForm({
   matchId,
   game,
   status,
+  bracketRound,
   current,
 }: {
   matchId: string;
   game: Game;
   status: MatchStatus;
+  bracketRound: number | null;
   /** What the players see now (staff page only). */
   current: { roomId: string | null; roomPassword: string | null };
 }) {
@@ -77,7 +85,7 @@ export function RoomCredentialsForm({
   // Valorant: one room code, no password (DECISIONS M22).
   const withPassword = roomNeedsPassword(game);
   const codeLabel = roomCodeLabel(game);
-  if (!canSetRoomCredentials(status)) return null;
+  if (!canSendRoomCode({ status, bracketRound })) return null;
   return (
     <Section title={withPassword ? "Room credentials" : "Room code"}>
       <p className="text-muted-foreground text-sm">

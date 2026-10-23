@@ -96,10 +96,12 @@ export async function runMatchStatusJob(now = new Date()): Promise<TransitionRec
         { status: "REGISTRATION_OPEN", registrationClosesAt: { lte: now } },
         // Tournament sign-up lists are never played: they stop at REGISTRATION_CLOSED.
         { status: "REGISTRATION_CLOSED", startsAt: { lte: now }, isEntryList: false },
+        // Bracket games end when the winner is picked (DECISIONS M72).
         {
           status: "LIVE",
           startsAt: { lte: addMinutes(now, -MIN_MATCH_MINUTES) },
           isEntryList: false,
+          bracketRound: null,
         },
       ],
     },

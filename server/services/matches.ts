@@ -16,7 +16,7 @@ import {
   type MatchData,
 } from "@/lib/match-schema";
 import {
-  canSetRoomCredentials,
+  canSendRoomCode,
   isCloneable,
   isEditable,
   MANUAL_TRANSITIONS,
@@ -250,6 +250,9 @@ export async function transitionMatchStatus(actor: Actor | null, input: unknown)
         "A tournament sign-up list is never played; only open or close it.",
       );
     }
+    if (match.status === "RESULTS_PENDING" && to === "LIVE" && match.bracketRound === null) {
+      throw new AppError("CONFLICT", "Only a bracket game can go back to live.");
+    }
     await applyTransition(tx, matchId, match.status, to, { actorId: me.id });
     // Open entry: closing registration opens as many lobbies as the entries need.
     const split = to === "REGISTRATION_CLOSED" ? await splitIntoLobbies(tx, matchId, me.id) : null;
@@ -279,8 +282,12 @@ export async function setRoomCredentials(actor: Actor | null, input: unknown) {
     const match = await loadMatch(tx, matchId);
     // Tournament matches are run by admins (DECISIONS M53/M60).
     const me = assertCanManageMatch(actor, match);
-    if (!canSetRoomCredentials(match.status)) {
+    if (!canSendRoomCode(match)) {
       throw new AppError("CONFLICT", "Room credentials can only be set before the match ends.");
+    }
+    // A bracket game the clock ended before its code went out is played now (DECISIONS M72).
+    if (match.status === "RESULTS_PENDING") {
+      await applyTransition(tx, matchId, "RESULTS_PENDING", "LIVE", { actorId: me.id });
     }
     // Free Fire / BGMI rooms need a password; a Valorant room is just a code (DECISIONS M22).
     const needsPassword = roomNeedsPassword(match.game);

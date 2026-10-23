@@ -231,10 +231,11 @@ export default async function AdminTournamentPage({
               roomId: r.roomId,
               roomPassword: r.roomPassword,
               sent: !!r.roomId,
+              // A bracket game without a winner can still get its code (DECISIONS M72).
               done:
                 r.status === "COMPLETED" ||
                 r.status === "CANCELLED" ||
-                r.status === "RESULTS_PENDING",
+                (r.status === "RESULTS_PENDING" && !r.bracket),
             }))}
           />
         </div>

@@ -26,7 +26,9 @@ export const TRANSITIONS: Record<MatchStatus, readonly MatchStatus[]> = {
   REGISTRATION_OPEN: ["REGISTRATION_CLOSED", "CANCELLED"],
   REGISTRATION_CLOSED: ["LIVE", "CANCELLED"],
   LIVE: ["RESULTS_PENDING", "CANCELLED"],
-  RESULTS_PENDING: ["COMPLETED"],
+  // -> LIVE only for a bracket game that ended on the clock before its room code went out
+  // (canSendRoomCode / setRoomCredentials); see DECISIONS M72.
+  RESULTS_PENDING: ["COMPLETED", "LIVE"],
   COMPLETED: ["RESULTS_PENDING"],
   CANCELLED: [],
 };
@@ -78,6 +80,8 @@ export interface ScheduledMatch {
   startsAt: Date;
   registrationOpensAt: Date | null;
   registrationClosesAt: Date;
+  /** Bracket games end when the admin picks the winner, never on the clock (DECISIONS M72). */
+  bracketRound: number | null;
 }
 
 /** When a LIVE match is expected to be over (startsAt + match length for the game). */
@@ -100,6 +104,7 @@ export function dueTransition(match: ScheduledMatch, now: Date): MatchStatus | n
     case "REGISTRATION_CLOSED":
       return match.startsAt <= now ? "LIVE" : null;
     case "LIVE":
+      if (match.bracketRound !== null) return null;
       return expectedEndAt(match) <= now ? "RESULTS_PENDING" : null;
     default:
       return null;
@@ -117,6 +122,17 @@ export function isCloneable(m: {
   parentMatchId?: string | null;
 }): boolean {
   return !m.isEntryList && m.bracketRound === null && !m.tournamentId && !m.parentMatchId;
+}
+
+/**
+ * A room code can still be sent to a bracket game the clock ended before it was played (no winner
+ * yet): sending it puts the game back to LIVE (DECISIONS M72).
+ */
+export function canSendRoomCode(match: { status: MatchStatus; bracketRound: number | null }) {
+  return (
+    canSetRoomCredentials(match.status) ||
+    (match.status === "RESULTS_PENDING" && match.bracketRound !== null)
+  );
 }
 
 /** Room credentials can be set while the lobby is being prepared or running. */

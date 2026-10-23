@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canSendRoomCode,
   canTransition,
   dueTransition,
   expectedEndAt,
@@ -20,6 +21,8 @@ const LEGAL: [MatchStatus, MatchStatus][] = [
   ["LIVE", "RESULTS_PENDING"],
   ["LIVE", "CANCELLED"],
   ["RESULTS_PENDING", "COMPLETED"],
+  // A bracket game reopened by sending its room code (DECISIONS M72).
+  ["RESULTS_PENDING", "LIVE"],
   ["COMPLETED", "RESULTS_PENDING"],
 ];
 
@@ -63,6 +66,7 @@ describe("dueTransition (cron)", () => {
     startsAt: start,
     registrationOpensAt: new Date("2026-10-01T10:00:00Z"),
     registrationClosesAt: new Date("2026-10-01T15:00:00Z"),
+    bracketRound: null,
   };
   const at = (iso: string) => new Date(iso);
 
@@ -94,6 +98,18 @@ describe("dueTransition (cron)", () => {
     const m = { ...base, status: "LIVE" as const };
     expect(dueTransition(m, at("2026-10-01T15:59:00Z"))).toBeNull();
     expect(dueTransition(m, at("2026-10-01T16:00:00Z"))).toBe("RESULTS_PENDING");
+  });
+
+  it("never ends a bracket game on the clock: the winner pick does (M72)", () => {
+    const m = { ...base, status: "LIVE" as const, bracketRound: 1 };
+    expect(dueTransition(m, at("2027-01-01T00:00:00Z"))).toBeNull();
+  });
+
+  it("lets a bracket game without a winner get its room code again (M72)", () => {
+    expect(canSendRoomCode({ status: "RESULTS_PENDING", bracketRound: 1 })).toBe(true);
+    expect(canSendRoomCode({ status: "RESULTS_PENDING", bracketRound: null })).toBe(false);
+    expect(canSendRoomCode({ status: "COMPLETED", bracketRound: 1 })).toBe(false);
+    expect(canSendRoomCode({ status: "LIVE", bracketRound: null })).toBe(true);
   });
 
   it("never moves results, completed or cancelled matches", () => {

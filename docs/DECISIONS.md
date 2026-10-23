@@ -814,3 +814,9 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 - Admin → Match → Registrations: each captain-entered roster player has an "Edit" button to replace that player's game ID and in-game name (e.g. one player entered twice). Allowed only before the match starts and on active entries; moderators for scrims, admins only for tournament matches (same as Remove).
 - The same checks as registration apply: valid ID and name, not banned, not already playing in this match. The account with that ID is linked only when its in-game name matches too.
 - In a tournament match, the same player is also replaced on the sign-up list, since later rounds are copied from it. Every edit writes `registration.roster_edit` to the audit log.
+
+## M72 — Bracket games never end on the clock (2026-10-23)
+
+- Live bug: Free Fire games are 20 minutes long, so Round 1 bracket games (start 6:00 pm) were moved to "Results pending" automatically at 6:20 pm before their room codes had gone out; the Team codes panel then showed "Game over" with no code form.
+- Bracket games now stay LIVE until the admin picks the winner (the status job skips them). Lobby/points matches and scrims still end on the clock as before.
+- A bracket game in "Results pending" without a winner can still get its room code (Team codes panel and the match page); sending it moves the game back to LIVE (new transition RESULTS_PENDING → LIVE, only for bracket games and only this way, audited).
