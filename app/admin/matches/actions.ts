@@ -17,6 +17,7 @@ import {
   adminPromoteRegistration,
   adminRemoveRegistration,
 } from "@/server/services/admin-registrations";
+import { adminEditRosterPlayer } from "@/server/services/admin-roster";
 import type { MatchFormInput } from "@/lib/match-schema";
 
 function refresh(matchId?: string) {
@@ -111,6 +112,19 @@ export async function removeRegistrationAction(input: {
     refresh(input.matchId);
     return result;
   }, "Entry removed");
+}
+
+export async function editRosterPlayerAction(input: {
+  matchId: string;
+  memberId: string;
+  gameId: string;
+  ign?: string;
+}) {
+  return runAction(async () => {
+    const actor = await requireModerator();
+    await adminEditRosterPlayer(actor, input);
+    refresh(input.matchId);
+  }, "Player updated");
 }
 
 export async function promoteRegistrationAction(input: {

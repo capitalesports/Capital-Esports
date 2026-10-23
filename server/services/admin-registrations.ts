@@ -121,6 +121,7 @@ export async function listMatchRegistrations(actor: Actor | null, matchId: strin
         captain: { id: r.user.id, name: r.user.displayName ?? "Player" },
         roster: r.members.length
           ? r.members.map((m) => ({
+              memberId: m.id as string | null,
               ...(m.user && !m.gameId
                 ? player(m.user, m.status)
                 : {
@@ -134,7 +135,7 @@ export async function listMatchRegistrations(actor: Actor | null, matchId: strin
               // The registering captain is the team's IGL (team leader).
               igl: r.members.length > 1 && m.userId === r.userId,
             }))
-          : [{ ...player(r.user, "CONFIRMED"), igl: false }],
+          : [{ memberId: null, ...player(r.user, "CONFIRMED"), igl: false }],
         payment: payment ? { status: payment.status, amountPaise: payment.amountPaise } : null,
         createdAt: r.createdAt,
       };

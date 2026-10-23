@@ -29,7 +29,8 @@ import { getLobbyGroup } from "@/server/queries/matches";
 import { PickWinnerButtons } from "@/components/admin/pick-winner";
 import { isHeadToHead } from "@/lib/match-modes";
 import { ACTIVE_REGISTRATION, listMatchRegistrations } from "@/server/services/admin-registrations";
-import { GAME_CONFIG } from "@/lib/games";
+import { GAME_CONFIG, type Game } from "@/lib/games";
+import { RosterPlayerEdit } from "@/components/admin/roster-player-edit";
 import { lobbyNoun, lobbyWord } from "@/lib/lobbies";
 import { MODE_LABEL } from "@/lib/match-modes";
 import { playerIdLabel } from "@/lib/player-label";
@@ -38,6 +39,30 @@ import { formatEntryFee, formatINR } from "@/lib/money";
 import { formatIST } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Match" };
+
+type RosterRow = Awaited<ReturnType<typeof listMatchRegistrations>>["rows"][number]["roster"][number];
+
+function RosterPlayer({
+  p,
+  game,
+  lower,
+}: {
+  p: RosterRow;
+  game: Game;
+  lower: (s: string) => string;
+}) {
+  return (
+    <span>
+      {p.igl ? <span className="text-gold mr-1 font-semibold">IGL</span> : null}
+      {playerIdLabel(game, p.gameId, p.ign)}
+      {/* The account name, when it isn't the in-game name already shown. */}
+      {p.name !== p.ign ? <span className="text-muted-foreground"> · {p.name}</span> : null}
+      {p.status !== "CONFIRMED" ? (
+        <span className="text-muted-foreground"> · {lower(p.status)}</span>
+      ) : null}
+    </span>
+  );
+}
 
 export default async function AdminMatchPage({ params }: PageProps<"/admin/matches/[id]">) {
   const { id } = await params;
@@ -64,6 +89,9 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
   const editable = isEditable(match.status);
   const canPromote = match.status === "REGISTRATION_OPEN" || match.status === "REGISTRATION_CLOSED";
   const lower = (s: string) => s.replace(/_/g, " ").toLowerCase();
+  // Same rule as assertCanManageMatch: tournament matches are admin-only.
+  const canEditRoster =
+    editable && (user.role === "ADMIN" || (!match.isEntryList && !match.tournamentId));
 
   const facts: [string, React.ReactNode][] = [
     ["Mode", `${match.kind === "TOURNAMENT" ? "Tournament · " : ""}${MODE_LABEL[match.mode]}`],
@@ -275,15 +303,19 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
                     <ul className="space-y-1 text-xs">
                       {r.roster.map((p, i) => (
                         <li key={`${p.userId ?? p.gameId ?? "p"}-${i}`}>
-                          {p.igl ? <span className="text-gold mr-1 font-semibold">IGL</span> : null}
-                          {playerIdLabel(match.game, p.gameId, p.ign)}
-                          {/* The account name, when it isn't the in-game name already shown. */}
-                          {p.name !== p.ign ? (
-                            <span className="text-muted-foreground"> · {p.name}</span>
-                          ) : null}
-                          {p.status !== "CONFIRMED" ? (
-                            <span className="text-muted-foreground"> · {lower(p.status)}</span>
-                          ) : null}
+                          {p.memberId && canEditRoster && ACTIVE_REGISTRATION.includes(r.status) ? (
+                            <RosterPlayerEdit
+                              matchId={match.id}
+                              memberId={p.memberId}
+                              game={match.game}
+                              gameId={p.gameId}
+                              ign={p.ign}
+                            >
+                              <RosterPlayer p={p} game={match.game} lower={lower} />
+                            </RosterPlayerEdit>
+                          ) : (
+                            <RosterPlayer p={p} game={match.game} lower={lower} />
+                          )}
                         </li>
                       ))}
                     </ul>

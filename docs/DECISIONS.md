@@ -808,3 +808,9 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 
 - Clicking Register (scrims and tournaments) first opens a pop-up: "Join our WhatsApp community" — room ID and password, the 30-minute reminder, timing changes and results go out there first. "Join now" opens the community link (from Admin → Content → Social links) and then offers "I joined, continue to register"; "Already joined, continue" goes straight to the registration form. Once a player has done either, this device remembers it (localStorage) and goes straight to the form next time. No WhatsApp link set = no pop-up. Discord stays as it was.
 - The pop-up loads only when Register is clicked (`next/dynamic`), so match pages stay as light as before; bundle baseline re-recorded for the shared-chunk regrouping.
+
+## M71 — Staff can edit a roster player (2026-10-23)
+
+- Admin → Match → Registrations: each captain-entered roster player has an "Edit" button to replace that player's game ID and in-game name (e.g. one player entered twice). Allowed only before the match starts and on active entries; moderators for scrims, admins only for tournament matches (same as Remove).
+- The same checks as registration apply: valid ID and name, not banned, not already playing in this match. The account with that ID is linked only when its in-game name matches too.
+- In a tournament match, the same player is also replaced on the sign-up list, since later rounds are copied from it. Every edit writes `registration.roster_edit` to the audit log.
