@@ -913,7 +913,7 @@ export async function advanceBracket(tx: Tx, matchId: string, actorId: string | 
   });
   if (!match.tournamentId || match.bracketRound === null) return null;
   const t = await loadTournament(tx, match.tournamentId);
-  if (t.format !== "BRACKET" || !t.entryMatchId) return null;
+  if (t.format !== "BRACKET" || !t.entryMatchId || t.cancelledAt) return null;
   const state = await bracketState(tx, t.entryMatchId, t.id);
   const existing = await tx.match.findMany({
     where: { tournamentId: t.id, bracketRound: { not: null } },
@@ -925,7 +925,8 @@ export async function advanceBracket(tx: Tx, matchId: string, actorId: string | 
   if (!todo.length) return null;
   const entries = await confirmedEntries(tx, t.entryMatchId);
   const byUnit = new Map(entries.map((e) => [unitOf(e), e]));
-  const totalRounds = bracketShape(entries.length).length;
+  // Void games shorten the bracket (M73): the last game is titled "Final".
+  const totalRounds = state.totalRounds;
   const created = [];
   for (const p of todo) {
     const before = existing.filter((m) => m.bracketRound === p.round - 1);
@@ -1082,10 +1083,8 @@ async function podium(
       });
     }
   }
-  const entries = await tx.registration.count({
-    where: { matchId: t.entryMatchId ?? "", status: "CONFIRMED" },
-  });
-  return bracketPodium(results, bracketShape(entries).length);
+  const state = await bracketState(tx, t.entryMatchId ?? "", t.id);
+  return bracketPodium(results, state.totalRounds);
 }
 
 const publishSchema = z.object({

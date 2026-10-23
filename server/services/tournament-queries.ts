@@ -5,7 +5,6 @@ import { publicMatchSelect } from "@/server/queries/matches";
 import type { Game } from "@/lib/games";
 import { brPoints } from "@/lib/points";
 import {
-  bracketShape,
   lobbyStandings,
   mondayOfIstWeek,
   bracketSlots,
@@ -228,6 +227,7 @@ export async function bracketState(reader: Reader, entryMatchId: string, tournam
       select: {
         bracketRound: true,
         bracketIndex: true,
+        status: true,
         results: {
           where: { approvedAt: { not: null }, won: true },
           select: { registration: { select: { teamId: true, userId: true } } },
@@ -244,14 +244,26 @@ export async function bracketState(reader: Reader, entryMatchId: string, tournam
   const names = new Map(
     entries.map((e) => [unitOf(e), e.team?.name ?? e.teamName ?? e.user.displayName ?? "Player"]),
   );
+  // Cancelled without a winner (both sides disqualified): nobody goes through (DECISIONS M73).
+  const voids = new Set(
+    matches
+      .filter((m) => m.status === "CANCELLED" && !m.results.length)
+      .map((m) => `${m.bracketRound}:${m.bracketIndex}`),
+  );
   const winnerOf = (r: number, i: number) => winners.get(`${r}:${i}`) ?? null;
-  const rounds = walkBracket(entries.map(unitOf), winnerOf);
+  const isVoid = (r: number, i: number) => voids.has(`${r}:${i}`);
+  const units = entries.map(unitOf);
+  const rounds = walkBracket(units, winnerOf, isVoid);
+  const slots = bracketSlots(units, winnerOf, isVoid);
   return {
     entrants: entries.length,
     names,
     rounds,
-    ready: readyBracketPairs(entries.map(unitOf), winnerOf),
-    slots: bracketSlots(entries.map(unitOf), winnerOf),
+    isVoid,
+    ready: readyBracketPairs(units, winnerOf, isVoid),
+    slots,
+    /** Rounds in the whole bracket, void games taken out. */
+    totalRounds: slots.length,
   };
 }
 
@@ -262,6 +274,8 @@ export interface BracketViewRound {
   bye: string | null;
   /** Games not created yet: who already won through to each side (null = still playing). */
   waiting: [string | null, string | null][];
+  /** Void games (cancelled, nobody went through): left out of the drawing (M73). */
+  voids: number[];
 }
 
 /** Every round of the bracket, with a placeholder for each match not created yet. */
@@ -270,8 +284,8 @@ export function bracketRounds(
   matches: TournamentMatch[],
 ): BracketViewRound[] {
   const nameOf = (unit: string | null) => (unit ? (state.names.get(unit) ?? "Player") : null);
-  return bracketShape(state.entrants).map((shape) => {
-    const slots = state.slots[shape.round - 1] ?? [];
+  return state.slots.map((slots, r) => {
+    const shape = { round: r + 1, matches: Math.floor(slots.length / 2), byes: slots.length % 2 };
     const byeUnit = shape.byes ? (slots[slots.length - 1] ?? null) : null;
     return {
       round: shape.round,
@@ -285,6 +299,9 @@ export function bracketRounds(
         nameOf(slots[2 * i] ?? null),
         nameOf(slots[2 * i + 1] ?? null),
       ]),
+      voids: Array.from({ length: shape.matches }, (_, i) => i).filter((i) =>
+        state.isVoid(shape.round, i),
+      ),
     };
   });
 }

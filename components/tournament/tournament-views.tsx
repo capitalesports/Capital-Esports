@@ -121,7 +121,7 @@ export function BracketView({
   const own = new Set(mine);
   const total = rounds.length;
   const layout = bracketLayout(
-    rounds.map((r) => ({ matches: r.matches.length, byes: r.bye ? 1 : 0 })),
+    rounds.map((r) => ({ matches: r.matches.length, byes: r.bye ? 1 : 0, voids: r.voids })),
   );
   const width = rounds.length * CARD_W + (rounds.length - 1) * COL_GAP;
   const height = layout.height * PITCH - (PITCH - CARD_H);

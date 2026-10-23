@@ -32,7 +32,10 @@ export interface BracketLayout {
   height: number;
 }
 
-export function bracketLayout(rounds: { matches: number; byes: number }[]): BracketLayout {
+/** `voids`: indices of void games (M73); they get no card and send nobody to the next round. */
+export function bracketLayout(
+  rounds: { matches: number; byes: number; voids?: number[] }[],
+): BracketLayout {
   const columns: LayoutColumn[] = [];
   const edges: LayoutEdge[] = [];
   for (const [ci, r] of rounds.entries()) {
@@ -41,23 +44,23 @@ export function bracketLayout(rounds: { matches: number; byes: number }[]): Brac
     /** The card in the previous column that entrant `e` of this round comes from. */
     const sourceOf = (e: number): LayoutItem | undefined => {
       if (!prev || !prevRound) return undefined;
-      if (prevRound.byes) {
-        return e === 0
-          ? prev.items.find((i) => i.kind === "bye")
-          : prev.items.find((i) => i.kind === "match" && i.index === e - 1);
-      }
-      return prev.items.find((i) => i.kind === "match" && i.index === e);
+      if (prevRound.byes && e === 0) return prev.items.find((i) => i.kind === "bye");
+      // Entrant e is the k-th winner; void games (no card) send nobody.
+      const k = prevRound.byes ? e - 1 : e;
+      return prev.items.filter((i) => i.kind === "match").sort((a, b) => a.index - b.index)[k];
     };
+    const isVoid = (i: number) => r.voids?.includes(i) ?? false;
     const placed: { item: LayoutItem; sources: LayoutItem[] }[] = [];
     if (ci === 0) {
       // Round 1: the bye on top (it meets the first winner next round), then the matches.
       let y = 0;
       if (r.byes) placed.push({ item: { kind: "bye", index: 0, y: y++ }, sources: [] });
       for (let i = 0; i < r.matches; i++)
-        placed.push({ item: { kind: "match", index: i, y: y++ }, sources: [] });
+        if (!isVoid(i)) placed.push({ item: { kind: "match", index: i, y: y++ }, sources: [] });
     } else {
       const entrants = r.matches * 2 + r.byes;
       for (let i = 0; i < r.matches; i++) {
+        if (isVoid(i)) continue;
         const sources = [sourceOf(2 * i), sourceOf(2 * i + 1)].filter((s): s is LayoutItem => !!s);
         const y = sources.reduce((sum, s) => sum + s.y, 0) / Math.max(1, sources.length);
         placed.push({ item: { kind: "match", index: i, y }, sources });

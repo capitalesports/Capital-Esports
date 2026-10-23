@@ -820,3 +820,10 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 - Live bug: Free Fire games are 20 minutes long, so Round 1 bracket games (start 6:00 pm) were moved to "Results pending" automatically at 6:20 pm before their room codes had gone out; the Team codes panel then showed "Game over" with no code form.
 - Bracket games now stay LIVE until the admin picks the winner (the status job skips them). Lobby/points matches and scrims still end on the clock as before.
 - A bracket game in "Results pending" without a winner can still get its room code (Team codes panel and the match page); sending it moves the game back to LIVE (new transition RESULTS_PENDING → LIVE, only for bracket games and only this way, audited).
+
+## M73 — A cancelled bracket game is void and leaves the bracket (2026-10-23)
+
+- Clash Squad Cup #1, Round 1 game 4 was cancelled (neither team turned up). The bracket still drew it, and its empty branch showed as "TBD" / "Bye: straight to the next round" in the quarterfinals and semifinals.
+- A bracket game cancelled without a winner is now **void**: both teams are out and nobody goes through. The next round is one entrant shorter, so the empty branch disappears; byes and round names (Quarterfinals / Semifinals / Final) follow from the shorter bracket. The void game gets no card on the public or admin bracket.
+- Cancelling a bracket game (Admin → Match → Cancel match) is how staff disqualify both teams. It also creates any later game that now has both sides. Bracket games are still never deleted: a deleted game would be drawn again.
+- Games already played keep their place as long as the void game comes after them in its round (true here: game 4 was the last game of round 1).

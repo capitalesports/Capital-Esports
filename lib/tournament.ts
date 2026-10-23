@@ -125,13 +125,23 @@ export function nextRoundEntrants<T>(winners: T[], bye: T | null): T[] {
   return bye === null ? winners : [bye, ...winners];
 }
 
+/**
+ * Is game `index` of `round` void (DECISIONS M73)? A bracket game cancelled without a winner
+ * (both sides disqualified or absent): nobody goes through, and the next round is one entrant
+ * shorter. Defaults to "no void games".
+ */
+export type IsVoid = (round: number, index: number) => boolean;
+const noVoids: IsVoid = () => false;
+
 export interface BracketRoundState<K> {
   round: number;
   entrants: K[];
   pairs: [K, K][];
   bye: K | null;
-  /** Winner of each pair (null = not decided yet). */
+  /** Winner of each pair (null = not decided yet, or void). */
   winners: (K | null)[];
+  /** Pairs whose game is void: nobody goes through. */
+  voided: boolean[];
   complete: boolean;
 }
 
@@ -143,20 +153,26 @@ export interface BracketRoundState<K> {
 export function walkBracket<K>(
   entrants: K[],
   winnerOf: (round: number, index: number) => K | null,
+  isVoid: IsVoid = noVoids,
 ): BracketRoundState<K>[] {
   const rounds: BracketRoundState<K>[] = [];
   let left = entrants;
   while (left.length >= 2) {
     const round = rounds.length + 1;
     const { pairs, bye } = pairRound(left);
+    const voided = pairs.map((_, i) => isVoid(round, i));
     const winners = pairs.map(([a, b], i) => {
+      if (voided[i]) return null;
       const w = winnerOf(round, i);
       return w === a || w === b ? w : null;
     });
-    const complete = winners.every((w) => w !== null);
-    rounds.push({ round, entrants: left, pairs, bye, winners, complete });
+    const complete = winners.every((w, i) => w !== null || voided[i]);
+    rounds.push({ round, entrants: left, pairs, bye, winners, voided, complete });
     if (!complete) break;
-    left = nextRoundEntrants(winners as K[], bye);
+    left = nextRoundEntrants(
+      winners.filter((w): w is K => w !== null),
+      bye,
+    );
   }
   return rounds;
 }
@@ -170,6 +186,7 @@ export function walkBracket<K>(
 export function bracketSlots<K>(
   entrants: K[],
   winnerOf: (round: number, index: number) => K | null,
+  isVoid: IsVoid = noVoids,
 ): (K | null)[][] {
   const rounds: (K | null)[][] = [];
   let left: (K | null)[] = entrants;
@@ -177,6 +194,8 @@ export function bracketSlots<K>(
     rounds.push(left);
     const winners: (K | null)[] = [];
     for (let i = 0; i + 1 < left.length; i += 2) {
+      // A void game sends nobody on: the next round is one slot shorter (M73).
+      if (isVoid(round, i / 2)) continue;
       const a = left[i] ?? null;
       const b = left[i + 1] ?? null;
       const w = a === null || b === null ? null : winnerOf(round, i / 2);
@@ -191,10 +210,12 @@ export function bracketSlots<K>(
 export function readyBracketPairs<K>(
   entrants: K[],
   winnerOf: (round: number, index: number) => K | null,
+  isVoid: IsVoid = noVoids,
 ): { round: number; index: number; pair: [K, K] }[] {
-  return bracketSlots(entrants, winnerOf).flatMap((slots, r) => {
+  return bracketSlots(entrants, winnerOf, isVoid).flatMap((slots, r) => {
     const out: { round: number; index: number; pair: [K, K] }[] = [];
     for (let i = 0; i + 1 < slots.length; i += 2) {
+      if (isVoid(r + 1, i / 2)) continue;
       const a = slots[i] ?? null;
       const b = slots[i + 1] ?? null;
       if (a !== null && b !== null) out.push({ round: r + 1, index: i / 2, pair: [a, b] });

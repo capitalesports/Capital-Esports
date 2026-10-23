@@ -34,6 +34,7 @@ import { executeRefunds } from "./payments";
 import { refreshLeaderboard } from "./leaderboard";
 import { enqueueMatchRefunds } from "./refunds";
 import { reopenResults, restoreNoShows } from "./results";
+import { advanceBracket } from "./tournaments";
 
 async function loadMatch(tx: Tx, matchId: string) {
   const match = await tx.match.findUnique({ where: { id: matchId } });
@@ -460,7 +461,10 @@ export async function cancelMatch(actor: Actor | null, input: unknown) {
   const result = await db.$transaction(async (tx) => {
     const match = await loadMatch(tx, matchId);
     const me = assertCanManageMatch(actor, match);
-    return cancelMatchInTx(tx, match, reason, { actorId: me.id, action: "match.cancel" });
+    const c = await cancelMatchInTx(tx, match, reason, { actorId: me.id, action: "match.cancel" });
+    // A cancelled bracket game is void (DECISIONS M73): a later game may now have both sides.
+    if (match.bracketRound !== null) await advanceBracket(tx, matchId, me.id);
+    return c;
   });
   await finishCancellation(result);
   return {
