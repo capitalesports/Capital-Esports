@@ -26,20 +26,27 @@ async function dashboardStats(isAdmin: boolean, now: Date): Promise<Stat[]> {
   const dayStart = startOfIstDay(now);
   const dayEnd = startOfIstDay(now, 1);
   const soon = addMinutes(now, 120);
-  const [today, open, pendingResults, reports, noRoom] = await Promise.all([
-    db.match.count({ where: { startsAt: { gte: dayStart, lt: dayEnd }, isEntryList: false } }),
-    db.match.count({ where: { status: "REGISTRATION_OPEN" } }),
-    db.match.count({ where: { status: "RESULTS_PENDING" } }),
-    db.report.count({ where: { status: "OPEN" } }),
-    db.match.count({
-      where: {
-        isEntryList: false,
-        roomId: null,
-        status: { in: ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE"] },
-        startsAt: { gte: dayStart, lt: dayEnd, lte: soon },
-      },
-    }),
-  ]);
+  // Played: a winner is decided (results approved / bracket winner picked) = COMPLETED.
+  const played = { isEntryList: false, status: "COMPLETED" as const };
+  const [today, open, pendingResults, reports, noRoom, completed, completedWeek] =
+    await Promise.all([
+      db.match.count({ where: { startsAt: { gte: dayStart, lt: dayEnd }, isEntryList: false } }),
+      db.match.count({ where: { status: "REGISTRATION_OPEN" } }),
+      db.match.count({ where: { status: "RESULTS_PENDING" } }),
+      db.report.count({ where: { status: "OPEN" } }),
+      db.match.count({
+        where: {
+          isEntryList: false,
+          roomId: null,
+          status: { in: ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE"] },
+          startsAt: { gte: dayStart, lt: dayEnd, lte: soon },
+        },
+      }),
+      db.match.count({ where: played }),
+      db.match.count({
+        where: { ...played, startsAt: { gte: startOfIstDay(now, -6), lt: dayEnd } },
+      }),
+    ]);
   const stats: Stat[] = [
     { label: "Open reports & disputes", value: reports, href: "/admin/reports", alert: true },
     {
@@ -56,6 +63,12 @@ async function dashboardStats(isAdmin: boolean, now: Date): Promise<Stat[]> {
     },
     { label: "Matches today (IST)", value: today, href: "/admin/matches" },
     { label: "Registration open", value: open, href: "/admin/matches?status=REGISTRATION_OPEN" },
+    {
+      label: "Matches completed",
+      value: completed,
+      detail: `${completedWeek} in the last 7 days`,
+      href: "/admin/matches?status=COMPLETED",
+    },
   ];
   if (!isAdmin) return stats;
   const [payouts, flags, messages, deletions] = await Promise.all([
