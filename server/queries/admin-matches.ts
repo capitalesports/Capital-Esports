@@ -51,6 +51,8 @@ export async function listMatchesForAdmin(actor: Actor | null, f: AdminMatchFilt
       maxSlots: true,
       entryFeePaise: true,
       prizePaise: true,
+      isEntryList: true,
+      tournament: { select: { id: true, title: true } },
       _count: { select: { registrations: { where: { status: "CONFIRMED" } } } },
     },
   });

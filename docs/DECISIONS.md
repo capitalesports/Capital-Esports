@@ -827,3 +827,8 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 - A bracket game cancelled without a winner is now **void**: both teams are out and nobody goes through. The next round is one entrant shorter, so the empty branch disappears; byes and round names (Quarterfinals / Semifinals / Final) follow from the shorter bracket. The void game gets no card on the public or admin bracket.
 - Cancelling a bracket game (Admin → Match → Cancel match) is how staff disqualify both teams. It also creates any later game that now has both sides. Bracket games are still never deleted: a deleted game would be drawn again.
 - Games already played keep their place as long as the void game comes after them in its round (true here: game 4 was the last game of round 1).
+
+## M74 — One row per tournament in Admin → Matches (2026-10-24)
+
+- A tournament's sign-up list and all of its games (lobbies, bracket rounds, final) showed as separate rows in Admin → Matches. They now show as one row: the tournament's name, mode and game count, the first game's start, sign-ups ("9 teams"), and one status (the game being played, else Completed once every game is over, else the sign-up list's status). The row opens the tournament page, which already lists every game with its room codes and winners.
+- Scrims and their lobbies are unchanged. The filters (game, kind, status, dates) still apply to the individual matches before grouping. Grouping is `adminMatchRows` in `lib/admin-match-rows.ts` (unit-tested).

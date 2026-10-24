@@ -19,6 +19,8 @@ import {
 import { requireStaffPage } from "@/server/auth/guards";
 import { toActor } from "@/server/auth/session";
 import { listMatchesForAdmin } from "@/server/queries/admin-matches";
+import { adminMatchRows } from "@/lib/admin-match-rows";
+import { entryCountLabel } from "@/lib/tournament";
 import { GAME_LIST } from "@/lib/games";
 import { MODE_LABEL } from "@/lib/match-schema";
 import { MATCH_STATUSES, STATUS_LABEL } from "@/lib/match-state";
@@ -42,6 +44,8 @@ export default async function AdminMatchesPage({ searchParams }: PageProps<"/adm
     to: str(sp.to),
   };
   const matches = await listMatchesForAdmin(toActor(user), filters);
+  // One row per tournament: its sign-up list and every game (DECISIONS M74).
+  const rows = adminMatchRows(matches);
 
   return (
     <>
@@ -123,30 +127,68 @@ export default async function AdminMatchesPage({ searchParams }: PageProps<"/adm
               </TableRow>
             </TableHeader>
             <TableBody>
-              {matches.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <GameBadge game={m.game} />
-                      <Link href={`/admin/matches/${m.id}`} className="font-medium hover:underline">
-                        {m.title}
-                      </Link>
-                    </div>
-                    <p className="text-muted-foreground text-xs">
-                      {m.kind === "TOURNAMENT" ? "Tournament · " : ""}
-                      {MODE_LABEL[m.mode]}
-                    </p>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{formatIST(m.startsAt)}</TableCell>
-                  <TableCell>
-                    <StatusPill status={m.status} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {m._count.registrations}/{m.maxSlots}
-                  </TableCell>
-                  <TableCell className="text-right">{formatEntryFee(m.entryFeePaise)}</TableCell>
-                </TableRow>
-              ))}
+              {rows.map((row) => {
+                if (row.kind === "tournament") {
+                  const t = row.sample;
+                  return (
+                    <TableRow key={`t-${row.id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <GameBadge game={t.game} />
+                          <Link
+                            href={`/admin/tournaments/${row.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {row.title}
+                          </Link>
+                        </div>
+                        <p className="text-muted-foreground text-xs">
+                          Tournament · {MODE_LABEL[t.mode]} · {row.games}{" "}
+                          {row.games === 1 ? "game" : "games"}
+                        </p>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{formatIST(row.startsAt)}</TableCell>
+                      <TableCell>
+                        <StatusPill status={row.status} />
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {row.entries === null ? "—" : `${row.entries} ${entryCountLabel(t.mode).toLowerCase()}`}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatEntryFee(t.entryFeePaise)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+                const m = row.match;
+                return (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <GameBadge game={m.game} />
+                        <Link
+                          href={`/admin/matches/${m.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {m.title}
+                        </Link>
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        {m.kind === "TOURNAMENT" ? "Tournament · " : ""}
+                        {MODE_LABEL[m.mode]}
+                      </p>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{formatIST(m.startsAt)}</TableCell>
+                    <TableCell>
+                      <StatusPill status={m.status} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {m._count.registrations}/{m.maxSlots}
+                    </TableCell>
+                    <TableCell className="text-right">{formatEntryFee(m.entryFeePaise)}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
