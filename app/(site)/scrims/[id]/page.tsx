@@ -206,7 +206,11 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
               </div>
             ))}
           </dl>
-          {match.description ? <p className="text-muted-foreground">{match.description}</p> : null}
+          {match.description ? (
+            <p className="text-muted-foreground break-words whitespace-pre-line">
+              {match.description}
+            </p>
+          ) : null}
           {registered.entries.length || registered.waitlisted ? (
             <section aria-labelledby="entries-heading" className="space-y-2">
               <h2 id="entries-heading" className="text-lg font-semibold">
