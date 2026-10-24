@@ -21,32 +21,50 @@ interface Stat {
   alert?: boolean;
 }
 
+/**
+ * Finished events, each counted once: a scrim split into lobbies is one scrim (its listing), and a
+ * tournament with all its games over (at least one played) is one tournament, however many games.
+ */
+async function completedCounts(weekStart: Date) {
+  const scrim = { tournamentId: null, parentMatchId: null, isEntryList: false };
+  const scrimDone = { ...scrim, status: "COMPLETED" as const };
+  const game = { isEntryList: false };
+  const tournamentDone = {
+    cancelledAt: null,
+    matches: {
+      some: { ...game, status: "COMPLETED" as const },
+      none: { ...game, status: { notIn: ["COMPLETED" as const, "CANCELLED" as const] } },
+    },
+  };
+  const [scrims, scrimsWeek, tournaments, tournamentsWeek] = await Promise.all([
+    db.match.count({ where: scrimDone }),
+    db.match.count({ where: { ...scrimDone, startsAt: { gte: weekStart } } }),
+    db.tournament.count({ where: tournamentDone }),
+    db.tournament.count({ where: { ...tournamentDone, startsAt: { gte: weekStart } } }),
+  ]);
+  return { scrims, scrimsWeek, tournaments, tournamentsWeek };
+}
+
 /** Counts that need a moderator/admin today. Admin-only cards are left out for moderators. */
 async function dashboardStats(isAdmin: boolean, now: Date): Promise<Stat[]> {
   const dayStart = startOfIstDay(now);
   const dayEnd = startOfIstDay(now, 1);
   const soon = addMinutes(now, 120);
-  // Played: a winner is decided (results approved / bracket winner picked) = COMPLETED.
-  const played = { isEntryList: false, status: "COMPLETED" as const };
-  const [today, open, pendingResults, reports, noRoom, completed, completedWeek] =
-    await Promise.all([
-      db.match.count({ where: { startsAt: { gte: dayStart, lt: dayEnd }, isEntryList: false } }),
-      db.match.count({ where: { status: "REGISTRATION_OPEN" } }),
-      db.match.count({ where: { status: "RESULTS_PENDING" } }),
-      db.report.count({ where: { status: "OPEN" } }),
-      db.match.count({
-        where: {
-          isEntryList: false,
-          roomId: null,
-          status: { in: ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE"] },
-          startsAt: { gte: dayStart, lt: dayEnd, lte: soon },
-        },
-      }),
-      db.match.count({ where: played }),
-      db.match.count({
-        where: { ...played, startsAt: { gte: startOfIstDay(now, -6), lt: dayEnd } },
-      }),
-    ]);
+  const [today, open, pendingResults, reports, noRoom, done] = await Promise.all([
+    db.match.count({ where: { startsAt: { gte: dayStart, lt: dayEnd }, isEntryList: false } }),
+    db.match.count({ where: { status: "REGISTRATION_OPEN" } }),
+    db.match.count({ where: { status: "RESULTS_PENDING" } }),
+    db.report.count({ where: { status: "OPEN" } }),
+    db.match.count({
+      where: {
+        isEntryList: false,
+        roomId: null,
+        status: { in: ["UPCOMING", "REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE"] },
+        startsAt: { gte: dayStart, lt: dayEnd, lte: soon },
+      },
+    }),
+    completedCounts(startOfIstDay(now, -6)),
+  ]);
   const stats: Stat[] = [
     { label: "Open reports & disputes", value: reports, href: "/admin/reports", alert: true },
     {
@@ -64,10 +82,16 @@ async function dashboardStats(isAdmin: boolean, now: Date): Promise<Stat[]> {
     { label: "Matches today (IST)", value: today, href: "/admin/matches" },
     { label: "Registration open", value: open, href: "/admin/matches?status=REGISTRATION_OPEN" },
     {
-      label: "Matches completed",
-      value: completed,
-      detail: `${completedWeek} in the last 7 days`,
-      href: "/admin/matches?status=COMPLETED",
+      label: "Scrims completed",
+      value: done.scrims,
+      detail: `${done.scrimsWeek} in the last 7 days`,
+      href: "/admin/matches?kind=SCRIM&status=COMPLETED",
+    },
+    {
+      label: "Tournaments completed",
+      value: done.tournaments,
+      detail: `${done.tournamentsWeek} in the last 7 days`,
+      href: "/admin/tournaments",
     },
   ];
   if (!isAdmin) return stats;
