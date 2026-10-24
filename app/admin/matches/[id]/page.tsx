@@ -40,7 +40,9 @@ import { formatIST } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Match" };
 
-type RosterRow = Awaited<ReturnType<typeof listMatchRegistrations>>["rows"][number]["roster"][number];
+type RosterRow = Awaited<
+  ReturnType<typeof listMatchRegistrations>
+>["rows"][number]["roster"][number];
 
 function RosterPlayer({
   p,
@@ -103,6 +105,7 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
     ["Registration closes", formatIST(match.registrationClosesAt)],
     ["Slots", `${confirmed}/${match.maxSlots} confirmed`],
     ["Minimum", match.minSlots ? `${match.minSlots} confirmed or cancelled` : "None"],
+    ["Maximum", match.entryLimit ? `${match.entryLimit}, then waitlist` : "No limit"],
     ["Entry fee", formatEntryFee(match.entryFeePaise)],
     ["Prize", formatINR(match.prizePaise)],
     [
@@ -233,8 +236,8 @@ export default async function AdminMatchPage({ params }: PageProps<"/admin/match
                 Pick the winner
               </h2>
               <p className="text-muted-foreground text-sm">
-                After the game: the winner moves to the next round of the bracket, and this game&apos;s
-                room details are removed from both teams.
+                After the game: the winner moves to the next round of the bracket, and this
+                game&apos;s room details are removed from both teams.
               </p>
               <PickWinnerButtons
                 tournamentId={match.tournament.id}

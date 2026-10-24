@@ -78,14 +78,21 @@ export type CardAction = "REGISTER" | "WAITLIST" | "CLOSED" | "SOON" | "PAID_SOO
 
 /** What a scrim card's button says. Open-entry scrims (DECISIONS M11) never fill up. */
 export function cardAction(
-  match: RegistrationWindow & { confirmedCount: number; maxSlots: number; openEntry?: boolean },
+  match: RegistrationWindow & {
+    confirmedCount: number;
+    maxSlots: number;
+    openEntry?: boolean;
+    /** An open-entry scrim's optional cap (DECISIONS M75). */
+    entryLimit?: number | null;
+  },
   now: Date,
   paymentsEnabled: boolean,
 ): CardAction {
   if (match.status === "UPCOMING") return "SOON";
   if (match.status !== "REGISTRATION_OPEN" || now >= match.registrationClosesAt) return "CLOSED";
   if (match.entryFeePaise > 0 && !paymentsEnabled) return "PAID_SOON";
-  return match.openEntry || match.confirmedCount < match.maxSlots ? "REGISTER" : "WAITLIST";
+  const cap = match.openEntry ? (match.entryLimit ?? Number.POSITIVE_INFINITY) : match.maxSlots;
+  return match.confirmedCount < cap ? "REGISTER" : "WAITLIST";
 }
 
 export const CARD_ACTION_LABEL: Record<CardAction, string> = {

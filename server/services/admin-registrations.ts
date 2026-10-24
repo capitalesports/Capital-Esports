@@ -5,6 +5,7 @@ import { writeAudit } from "@/server/audit";
 import { db, type Tx } from "@/server/db";
 import { AppError } from "@/server/errors";
 import { parseInput } from "@/server/validation";
+import { entryCap } from "@/lib/lobbies";
 import { isEditable, type MatchStatus } from "@/lib/match-state";
 import { assertCanManageMatch, assertModerator, type Actor } from "@/lib/roles";
 import { notify, type NotificationEvent } from "./notify";
@@ -42,6 +43,11 @@ export async function dropRegistration(
     maxSlots: number;
     entryFeePaise: number;
     paymentQrUrl: string | null;
+    isEntryList: boolean;
+    entryLimit: number | null;
+    tournamentId: string | null;
+    bracketRound: number | null;
+    parentMatchId: string | null;
   },
   refundReason: string,
 ): Promise<DroppedRegistration> {
@@ -219,7 +225,8 @@ export async function adminPromoteRegistration(actor: Actor | null, input: unkno
     const taken = await tx.registration.count({
       where: { matchId, status: { in: SLOT_HOLDING } },
     });
-    if (taken >= match.maxSlots) throw new AppError("CONFLICT", "There is no free slot.");
+    if (taken >= (entryCap(match) ?? Number.POSITIVE_INFINITY))
+      throw new AppError("CONFLICT", "There is no free slot.");
     const status = match.entryFeePaise > 0 ? "PENDING_PAYMENT" : "CONFIRMED";
     if (status === "PENDING_PAYMENT") await enterPendingPayment(tx, reg, match);
     else await tx.registration.update({ where: { id: reg.id }, data: { status } });

@@ -137,6 +137,11 @@ export async function updateMatch(actor: Actor | null, matchId: string, input: u
         maxSlots: [`At least ${taken} (already filled)`],
       });
     }
+    if (openEntry && data.entryLimit !== null && data.entryLimit < taken) {
+      throw new AppError("VALIDATION", `${taken} are already confirmed.`, {
+        entryLimit: [`At least ${taken} (already confirmed)`],
+      });
+    }
     await assertTournamentLink(tx, data, before);
     const after = await tx.match.update({ where: { id: matchId }, data });
     await writeAudit(tx, {
@@ -181,6 +186,7 @@ async function cloneTo(tx: Tx, actorId: string, sourceId: string, startsAt: Date
       registrationClosesAt: at(src.registrationClosesAt),
       maxSlots: src.maxSlots,
       minSlots: src.minSlots,
+      entryLimit: src.entryLimit,
       entryFeePaise: src.entryFeePaise,
       prizePaise: src.prizePaise,
       streamUrl: src.streamUrl,

@@ -44,6 +44,7 @@ export default async function EditMatchPage({ params }: PageProps<"/admin/matche
               : "",
             closeOffsetMinutes: String(closeOffset),
             minSlots: String(match.minSlots),
+            entryLimit: match.entryLimit ? String(match.entryLimit) : "",
             entryFee: paiseToRupeesInput(match.entryFeePaise),
             prize: paiseToRupeesInput(match.prizePaise),
             streamUrl: match.streamUrl ?? "",

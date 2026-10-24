@@ -832,3 +832,9 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 
 - A tournament's sign-up list and all of its games (lobbies, bracket rounds, final) showed as separate rows in Admin → Matches. They now show as one row: the tournament's name, mode and game count, the first game's start, sign-ups ("9 teams"), and one status (the game being played, else Completed once every game is over, else the sign-up list's status). The row opens the tournament page, which already lists every game with its room codes and winners.
 - Scrims and their lobbies are unchanged. The filters (game, kind, status, dates) still apply to the individual matches before grouping. Grouping is `adminMatchRows` in `lib/admin-match-rows.ts` (unit-tested).
+
+## M75 — Optional maximum entries for scrims (2026-10-24)
+
+- Admin → New match / Edit has a new optional field for scrims: "Maximum players" (squads / teams by mode). Empty = no limit, as before (DECISIONS M11/M49: entries split into extra lobbies at close).
+- With a number set, the scrim takes that many confirmed entries; after that the card shows "Join Waitlist" and new registrations are waitlisted. A cancelled or removed entry frees a place for the next one on the waitlist, and an admin can promote one by hand. Above one lobby's size the confirmed entries are still split into balanced lobbies at close.
+- Stored in the existing `Match.entryLimit` column (the tournament team limit of M69), so no migration. It must be at least 2 and at least the minimum; when editing, it can't go below the entries already confirmed. Tournament matches ignore it (fixed capacity). Clones keep it.

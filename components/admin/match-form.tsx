@@ -33,6 +33,8 @@ export interface MatchFormValues {
   registrationOpensAt: string;
   closeOffsetMinutes: string;
   minSlots: string;
+  /** Empty = no limit (DECISIONS M75). */
+  entryLimit: string;
   entryFee: string;
   prize: string;
   streamUrl: string;
@@ -49,6 +51,7 @@ export const EMPTY_MATCH_FORM: MatchFormValues = {
   registrationOpensAt: "",
   closeOffsetMinutes: "30",
   minSlots: "2",
+  entryLimit: "",
   entryFee: "0",
   prize: "0",
   streamUrl: "",
@@ -183,6 +186,24 @@ export function MatchForm({
           onChange={(e) => set("minSlots", e.target.value)}
         />
       </FormField>
+      {v.kind === "SCRIM" ? (
+        <FormField
+          id="m-entryLimit"
+          label={`Maximum ${slotUnit(v.mode)} (optional)`}
+          help="Empty = no limit (extra lobbies open as needed). When full, new registrations join the waitlist."
+          errors={err("entryLimit")}
+        >
+          <Input
+            {...ids("entryLimit")}
+            type="number"
+            inputMode="numeric"
+            min={2}
+            placeholder="No limit"
+            value={v.entryLimit}
+            onChange={(e) => set("entryLimit", e.target.value)}
+          />
+        </FormField>
+      ) : null}
       <div className="sm:col-span-2">
         <FormField id="m-title" label="Title" errors={err("title")}>
           <Input

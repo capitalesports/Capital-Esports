@@ -86,6 +86,18 @@ export const matchFormSchema = z
       .default(DEFAULT_CLOSE_OFFSET_MINUTES),
     // No max field: capacity follows the game and mode (full lobby, or 2 sides head-to-head).
     minSlots: z.coerce.number().int().min(0, "Must be 0 or more").default(2),
+    /** Scrims: optional cap on entries; empty = unlimited, split into lobbies (DECISIONS M75). */
+    entryLimit: z
+      .preprocess(
+        (v) => (v === "" || v === undefined ? null : v),
+        z.coerce
+          .number()
+          .int("Whole number")
+          .min(2, "At least 2")
+          .max(10_000, "At most 10,000")
+          .nullable(),
+      )
+      .optional(),
     entryFee: moneyField,
     prize: moneyField,
     streamUrl: optionalUrl,
@@ -110,6 +122,13 @@ export const matchFormSchema = z
         message: isHeadToHead(m.mode)
           ? `${MODE_LABEL[m.mode]} matches have 2 sides: at most 2`
           : `At most ${capacity} (a full lobby)`,
+      });
+    }
+    if (m.kind === "SCRIM" && m.entryLimit && m.entryLimit < m.minSlots) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["entryLimit"],
+        message: `At least the minimum (${m.minSlots})`,
       });
     }
     const closesAt = addMinutes(m.startsAt, -m.closeOffsetMinutes);
@@ -139,6 +158,8 @@ export const matchFormSchema = z
     registrationClosesAt: addMinutes(m.startsAt, -m.closeOffsetMinutes),
     maxSlots: maxSlotsFor(m.game, m.mode),
     minSlots: m.minSlots,
+    // Tournament matches keep their fixed capacity (maxSlots).
+    entryLimit: m.kind === "SCRIM" ? (m.entryLimit ?? null) : null,
     entryFeePaise: m.entryFee,
     prizePaise: m.prize,
     streamUrl: m.streamUrl,

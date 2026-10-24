@@ -107,15 +107,23 @@ async function alreadyInMatch(tx: Tx, matchId: string, userIds: string[]) {
  */
 export async function promoteWaitlist(
   tx: Tx,
-  match: Pick<LockedMatch, "id" | "maxSlots" | "entryFeePaise" | "paymentQrUrl"> & {
-    isEntryList?: boolean;
-    entryLimit?: number | null;
-  },
+  match: Pick<
+    LockedMatch,
+    | "id"
+    | "maxSlots"
+    | "entryFeePaise"
+    | "paymentQrUrl"
+    | "isEntryList"
+    | "entryLimit"
+    | "tournamentId"
+    | "bracketRound"
+    | "parentMatchId"
+  >,
 ): Promise<string[]> {
   const promoted: string[] = [];
   let taken = await slotsTaken(tx, match.id);
-  // A tournament with a team limit (M69) fills up to it; other matches up to maxSlots.
-  const cap = match.isEntryList ? (match.entryLimit ?? Number.POSITIVE_INFINITY) : match.maxSlots;
+  // Up to the match's cap: maxSlots, or the scrim / tournament limit (M69, M75).
+  const cap = entryCap(match) ?? Number.POSITIVE_INFINITY;
   while (taken < cap) {
     const next = await tx.registration.findFirst({
       where: { matchId: match.id, status: "WAITLISTED" },

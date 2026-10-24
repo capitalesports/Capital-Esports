@@ -32,14 +32,14 @@ export function takesEveryone(m: OpenEntryFields): boolean {
 
 /**
  * How many entries a match takes before new ones are waitlisted: maxSlots for capped matches; for
- * open-entry scrims and tournament sign-up lists none, unless the admin set a tournament limit
- * (DECISIONS M69). null = unlimited.
+ * open-entry scrims and tournament sign-up lists none, unless the admin set a limit (DECISIONS M69,
+ * M75). null = unlimited.
  */
 export function entryCap(
   m: OpenEntryFields & { maxSlots: number; entryLimit?: number | null },
 ): number | null {
   if (!takesEveryone(m)) return m.maxSlots;
-  return m.isEntryList && m.entryLimit ? m.entryLimit : null;
+  return m.entryLimit ? m.entryLimit : null;
 }
 
 export interface LobbyPlan {
