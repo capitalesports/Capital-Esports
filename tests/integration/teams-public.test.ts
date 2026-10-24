@@ -76,4 +76,34 @@ describe("getRegisteredEntries", () => {
     expect(waitlisted).toBe(1);
     expect(JSON.stringify(entries)).not.toContain(solo.phone);
   });
+
+  it("lists a paid entry only once its proof is submitted, as pending, and never counts it (M76)", async () => {
+    const admin = await createUser({ role: "ADMIN" });
+    const [paid, unpaid] = await Promise.all([
+      createPlayer("FREE_FIRE", { displayName: "Paid" }),
+      createPlayer("FREE_FIRE", { displayName: "Unpaid" }),
+    ]);
+    const m = await createMatch(admin.id, { entryFeePaise: 4000 });
+    for (const [i, [user, status]] of ([
+      [paid, "SUBMITTED"],
+      [unpaid, "AWAITING_PROOF"],
+    ] as const).entries()) {
+      const r = await testDb().registration.create({
+        data: { matchId: m.id, userId: user.id, status: "PENDING_PAYMENT", position: i + 1 },
+      });
+      await testDb().manualPayment.create({
+        data: {
+          registrationId: r.id,
+          matchId: m.id,
+          userId: user.id,
+          amountPaise: 4000,
+          status,
+          expiresAt: new Date(Date.now() + 30 * 60_000),
+        },
+      });
+    }
+    const { entries, pending } = await getRegisteredEntries(m.id);
+    expect(entries).toEqual([]);
+    expect(pending.map((e) => e.name)).toEqual(["Paid"]);
+  });
 });

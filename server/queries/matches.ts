@@ -36,9 +36,9 @@ export const publicMatchSelect = {
   bracketRound: true,
   parentMatchId: true,
   lobbyNumber: true,
-  _count: {
-    select: { registrations: { where: { status: { in: ["CONFIRMED", "PENDING_PAYMENT"] } } } },
-  },
+  // Public "registered" counts only confirmed entries: a paid entry counts once its payment is
+  // approved, not while it is unpaid or its proof waits for review (DECISIONS M76).
+  _count: { select: { registrations: { where: { status: "CONFIRMED" } } } },
 } satisfies Prisma.MatchSelect;
 
 export type PublicMatch = Prisma.MatchGetPayload<{ select: typeof publicMatchSelect }>;
@@ -101,7 +101,13 @@ export async function getViewerEntry(matchId: string, userId: string) {
  * id to link to) and the waitlist size. Never phone numbers or game IDs.
  */
 export async function getRegisteredEntries(matchId: string) {
-  const [confirmed, waitlisted] = await Promise.all([
+  const entrySelect = {
+    id: true,
+    teamName: true,
+    team: { select: { id: true, name: true } },
+    user: { select: { id: true, displayName: true } },
+  } as const;
+  const [confirmed, waitlisted, submitted] = await Promise.all([
     db.registration.findMany({
       where: { matchId, status: "CONFIRMED" },
       orderBy: { position: "asc" },
@@ -113,8 +119,24 @@ export async function getRegisteredEntries(matchId: string) {
       },
     }),
     db.registration.count({ where: { matchId, status: "WAITLISTED" } }),
+    // Paid the QR and uploaded proof, waiting for an admin: listed as pending, not counted (M76).
+    // Entries that haven't submitted proof yet are not shown at all.
+    db.registration.findMany({
+      where: { matchId, status: "PENDING_PAYMENT", manualPayment: { status: "SUBMITTED" } },
+      orderBy: { position: "asc" },
+      select: entrySelect,
+    }),
   ]);
+  const toEntry = (r: (typeof submitted)[number]) =>
+    r.team
+      ? { id: r.id, name: r.team.name, href: `/teams/${r.team.id}` }
+      : {
+          id: r.id,
+          name: r.teamName ?? r.user.displayName ?? "Player",
+          href: `/players/${r.user.id}`,
+        };
   return {
+    pending: submitted.map(toEntry),
     entries: confirmed.map((r) =>
       r.team
         ? { id: r.id, name: r.team.name, href: `/teams/${r.team.id}` }
@@ -147,9 +169,7 @@ export async function getLobbyGroup(
       title: true,
       lobbyNumber: true,
       status: true,
-      _count: {
-        select: { registrations: { where: { status: { in: ["CONFIRMED", "PENDING_PAYMENT"] } } } },
-      },
+      _count: { select: { registrations: { where: { status: "CONFIRMED" } } } },
     },
   });
   const ids = lobbies.map((l) => l.id);

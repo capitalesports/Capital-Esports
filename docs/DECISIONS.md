@@ -838,3 +838,9 @@ Known: payment-proof screenshots are stored at unguessable public URLs, shown on
 - Admin → New match / Edit has a new optional field for scrims: "Maximum players" (squads / teams by mode). Empty = no limit, as before (DECISIONS M11/M49: entries split into extra lobbies at close).
 - With a number set, the scrim takes that many confirmed entries; after that the card shows "Join Waitlist" and new registrations are waitlisted. A cancelled or removed entry frees a place for the next one on the waitlist, and an admin can promote one by hand. Above one lobby's size the confirmed entries are still split into balanced lobbies at close.
 - Stored in the existing `Match.entryLimit` column (the tournament team limit of M69), so no migration. It must be at least 2 and at least the minimum; when editing, it can't go below the entries already confirmed. Tournament matches ignore it (fixed capacity). Clones keep it.
+
+## M76 — Public counts show approved entries only (2026-10-24)
+
+- "Registered players" on scrim pages and cards (and lobby counts) counted entries still waiting for payment, so a paid scrim looked filled by people who had not paid or uploaded anything.
+- Public counts now include only CONFIRMED entries: a paid entry counts once an admin approves its payment. An entry whose player uploaded the transaction ID and screenshot is listed under "Payment pending approval" on the scrim page but not counted; an entry that has not submitted proof is not shown at all.
+- Unchanged: a pending entry still holds its place for capacity (scrims with a maximum, tournament matches) until its proof deadline (30 minutes) passes or the admin rejects it.

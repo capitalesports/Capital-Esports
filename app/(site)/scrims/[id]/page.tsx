@@ -211,7 +211,7 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
               {match.description}
             </p>
           ) : null}
-          {registered.entries.length || registered.waitlisted ? (
+          {registered.entries.length || registered.pending.length || registered.waitlisted ? (
             <section aria-labelledby="entries-heading" className="space-y-2">
               <h2 id="entries-heading" className="text-lg font-semibold">
                 Registered {unit}
@@ -232,6 +232,26 @@ export default async function MatchPage({ params }: PageProps<"/scrims/[id]">) {
                     </li>
                   ))}
                 </ol>
+              ) : null}
+              {registered.pending.length ? (
+                <div className="space-y-1">
+                  <h3 className="text-muted-foreground text-sm font-semibold">
+                    Payment pending approval
+                  </h3>
+                  <ul className="card-ds grid gap-x-4 p-2 sm:grid-cols-2">
+                    {registered.pending.map((e) => (
+                      <li key={e.id} className="flex items-center gap-2">
+                        <Link
+                          href={e.href}
+                          className="min-h-tap text-muted-foreground inline-flex min-w-0 items-center truncate hover:underline"
+                        >
+                          {e.name}
+                        </Link>
+                        <span className="text-muted-foreground shrink-0 text-xs">· pending</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
               {registered.waitlisted ? (
                 <p className="text-muted-foreground text-sm">
